@@ -1,6 +1,6 @@
 import React from 'react';
 import { AmbulanceRecommendation } from '../types';
-import { Truck, CheckCircle2, HelpCircle, ShieldCheck } from 'lucide-react';
+import { Truck, CheckCircle2, HelpCircle, ShieldCheck, Radio } from 'lucide-react';
 
 interface AmbulancePanelProps {
   ambulance: AmbulanceRecommendation | null;
@@ -37,6 +37,9 @@ export const AmbulancePanel: React.FC<AmbulancePanelProps> = ({ ambulance, onWhy
               <Truck className="h-3.5 w-3.5" />
             </div>
             <span className="text-[11px] font-mono font-bold tracking-wider text-cyan-400 uppercase">AMBULANCE DISPATCH</span>
+            <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-cyan-950/40 text-cyan-400 border border-cyan-500/30">
+              DEMO TELEMETRY
+            </span>
           </div>
           <button
             onClick={onWhyClick}
@@ -79,6 +82,15 @@ export const AmbulancePanel: React.FC<AmbulancePanelProps> = ({ ambulance, onWhy
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="mt-2 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+        <span className="flex items-center gap-1">
+          <Radio className="h-3 w-3 text-cyan-500/70" /> Fleet Dispatch Beacon
+        </span>
+        <span className="text-zinc-500 text-[9px]">
+          Simulated Vehicle GPS Feed
+        </span>
       </div>
     </div>
   );

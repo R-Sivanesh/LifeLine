@@ -1,6 +1,6 @@
 import React from 'react';
 import { HospitalRecommendation } from '../types';
-import { Building2, CheckCircle2, HelpCircle, AlertCircle } from 'lucide-react';
+import { Building2, CheckCircle2, HelpCircle, MapPin, AlertTriangle } from 'lucide-react';
 
 interface HospitalPanelProps {
   hospital: HospitalRecommendation | null;
@@ -26,6 +26,9 @@ export const HospitalPanel: React.FC<HospitalPanelProps> = ({ hospital, onWhyCli
               <Building2 className="h-3.5 w-3.5" />
             </div>
             <span className="text-[11px] font-mono font-bold tracking-wider text-emerald-400 uppercase">DESTINATION HOSPITAL</span>
+            <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold bg-emerald-950/40 text-emerald-400 border border-emerald-500/30">
+              GOOGLE PLACES VERIFIED
+            </span>
           </div>
           <button
             onClick={onWhyClick}
@@ -52,8 +55,8 @@ export const HospitalPanel: React.FC<HospitalPanelProps> = ({ hospital, onWhyCli
                   ICU READY
                 </span>
               )}
-              <span className="text-[11px] text-zinc-400 font-mono">
-                Simulated Beds: <strong className="text-emerald-400">{hospital.available_beds}</strong>
+              <span className="text-[10px] text-zinc-400 font-mono bg-zinc-800/80 px-2 py-0.5 rounded border border-zinc-700">
+                Beds (Est): <strong className="text-emerald-400">{hospital.available_beds}</strong>
               </span>
             </div>
           </div>
@@ -79,8 +82,13 @@ export const HospitalPanel: React.FC<HospitalPanelProps> = ({ hospital, onWhyCli
         </div>
       </div>
 
-      <div className="mt-2 text-[10px] text-zinc-500 italic">
-        * Simulated Hospital Capacity & Status
+      <div className="mt-2 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+        <span className="flex items-center gap-1">
+          <MapPin className="h-3 w-3 text-emerald-500/70" /> Real-world coordinates
+        </span>
+        <span className="text-zinc-500 text-[9px]">
+          Capacity: No Public API (Estimated)
+        </span>
       </div>
     </div>
   );

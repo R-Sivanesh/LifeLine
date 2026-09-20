@@ -43,7 +43,7 @@ async def update_ambulance(id: str, payload: AmbulanceUpdate, db: Session = Depe
     if not amb:
         raise HTTPException(status_code=404, detail="Ambulance not found")
     
-    update_data = payload.dict(exclude_unset=True)
+    update_data = payload.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(amb, key, value)
         

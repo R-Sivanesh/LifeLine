@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { lifelineApi } from '../services/api';
 import { Header } from '../components/Header';
-import { MapboxMap } from '../components/MapboxMap';
+import { TacticalMap } from '../components/TacticalMap';
 import { Sparkles, AlertCircle, ArrowRight, MapPin, Send, HelpCircle, FileText, CheckCircle2 } from 'lucide-react';
 import { EmergencyAnalysis } from '../types';
 
@@ -242,7 +242,7 @@ export const NewEmergencyPage: React.FC = () => {
               Click Map to Select Incident Pin:
             </div>
             <div className="h-[380px] w-full">
-              <MapboxMap
+              <TacticalMap
                 emergency={{
                   id: 'preview',
                   description,

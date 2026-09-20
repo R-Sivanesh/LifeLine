@@ -9,27 +9,39 @@ logger = logging.getLogger(__name__)
 
 # Fallback deterministic keyword parser
 def fallback_parse_emergency(text: str) -> EmergencyAnalysisResponse:
+    """
+    Deterministic NLP rule engine to extract structured emergency metrics
+    when external LLM APIs are offline or unconfigured.
+    """
     lower_text = text.lower()
+    
+    def has_word(keywords: list) -> bool:
+        for kw in keywords:
+            if re.search(r'\b' + re.escape(kw) + r'\b', lower_text):
+                return True
+        return False
     
     # 1. Detect Incident Type
     incident_type = "MEDICAL_EMERGENCY"
-    if any(k in lower_text for k in ["accident", "collision", "crash", "hit and run", "run over", "railway bridge", "vehicle", "car", "bike", "truck"]):
+    if has_word(["collision", "accident", "crash", "hit and run", "run over", "railway bridge", "vehicle", "car", "bike", "truck", "motorcycle"]):
         incident_type = "ROAD_ACCIDENT"
-    elif any(k in lower_text for k in ["heart attack", "cardiac", "chest pain", "pulse"]):
+    elif has_word(["heart attack", "cardiac", "cardiac arrest", "chest pain", "pulse", "collapsed"]):
         incident_type = "CARDIAC_ARREST"
-    elif any(k in lower_text for k in ["stroke", "paralysis", "slurred speech"]):
+    elif has_word(["stroke", "paralysis", "slurred speech"]):
         incident_type = "STROKE"
-    elif any(k in lower_text for k in ["fire", "burn", "explosion", "smoke"]):
+    elif has_word(["fire", "burn", "explosion", "smoke"]):
         incident_type = "FIRE_BURN"
-    elif any(k in lower_text for k in ["fall", "fracture", "broken bone", "bleeding"]):
+    elif has_word(["fall", "fracture", "broken bone", "bleeding"]):
         incident_type = "TRAUMA_INJURY"
-    elif any(k in lower_text for k in ["breath", "suffocat", "asthma", "chok"]):
+    elif has_word(["breath", "suffocat", "asthma", "chok", "shortness of breath"]):
         incident_type = "RESPIRATORY_DISTRESS"
 
     # 2. Extract Patient Counts
     patient_count = 1
-    # Match patterns like "3 people", "three patients", "two injured", "4 persons"
-    word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+    word_to_num = {
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+        "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+    }
     
     num_matches = re.findall(r'(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:people|persons|patients|injured|victims|individuals|casualties)', lower_text)
     if num_matches:

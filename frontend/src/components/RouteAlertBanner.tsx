@@ -26,7 +26,7 @@ export const RouteAlertBanner: React.FC<RouteAlertBannerProps> = ({
               <span>⚠ ROUTE DISRUPTION DETECTED</span>
             </div>
             <p className="text-xs text-zinc-200 mt-0.5">
-              Active road hazard/blockage detected on active corridor. Calculating optimal safe detour...
+              Road blockage detected on current route. Recalculating safe alternative corridor...
             </p>
           </div>
         </div>
@@ -50,7 +50,7 @@ export const RouteAlertBanner: React.FC<RouteAlertBannerProps> = ({
             </span>
           </div>
           <p className="text-xs text-zinc-200 mt-0.5">
-            <strong>Reason:</strong> {rerouteResult.reason}
+            <strong className="text-cyan-400 font-mono">[ WHY? ]</strong> {rerouteResult.reason}
           </p>
         </div>
       </div>

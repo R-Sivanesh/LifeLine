@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { lifelineApi } from '../services/api';
 import { Header } from '../components/Header';
-import { MapboxMap } from '../components/MapboxMap';
+import { TacticalMap } from '../components/TacticalMap';
 import { Emergency, OptimizationResult, DecisionExplanation, RoadIncident } from '../types';
 import { ArrowLeft, CheckCircle2, Clock, MapPin, Users, Activity, ShieldAlert, Truck, Building2 } from 'lucide-react';
 
@@ -160,7 +160,7 @@ export const EmergencyDetailPage: React.FC = () => {
 
           {/* Right Column: Map (6 cols) */}
           <div className="lg:col-span-6 h-[460px]">
-            <MapboxMap
+            <TacticalMap
               emergency={emergency}
               selectedAmbulance={optimization?.selected_ambulance}
               selectedHospital={optimization?.selected_hospital}

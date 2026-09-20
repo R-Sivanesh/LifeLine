@@ -1,10 +1,11 @@
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type EmergencyStatus = 'ACTIVE' | 'DISPATCHED' | 'EN_ROUTE' | 'ARRIVED' | 'RESOLVED';
+export type EmergencyStatus = 'INTAKE' | 'INFORMATION_SUFFICIENT' | 'ANALYZING' | 'PLAN_READY' | 'ACTIVE' | 'DISPATCHED' | 'EN_ROUTE' | 'REROUTING' | 'ARRIVED' | 'RESOLVED';
 export type AmbulanceCapability = 'BASIC' | 'ADVANCED' | 'ICU';
 export type AmbulanceStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
 export type HospitalStatus = 'OPEN' | 'LIMITED' | 'CLOSED';
 export type IncidentType = 'ACCIDENT' | 'FLOOD' | 'ROAD_BLOCK' | 'CONSTRUCTION' | 'CONGESTION' | 'HAZARD';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'BLOCKED';
+export type DataStatusLevel = 'LIVE' | 'SIMULATED' | 'UNKNOWN' | 'DERIVED' | 'PUBLIC_DATA' | 'DEGRADED' | 'CONFIGURED' | 'MISSING';
 
 export interface Emergency {
   id: string;
@@ -16,7 +17,7 @@ export interface Emergency {
   patient_count: number;
   critical_patient_count: number;
   severity: Severity;
-  status: EmergencyStatus;
+  status: string;
   created_at?: string;
 }
 
@@ -55,6 +56,9 @@ export interface HospitalRecommendation {
   trauma_capable: boolean;
   icu_available: boolean;
   available_beds: number;
+  address?: string;
+  phone?: string;
+  verification_status?: string;
 }
 
 export interface Hospital {
@@ -68,6 +72,8 @@ export interface Hospital {
   available_beds: number;
   specialities: string[];
   status: HospitalStatus;
+  address?: string;
+  phone?: string;
 }
 
 export interface RoadIncident {
@@ -100,6 +106,15 @@ export interface RouteOption {
   steps: RouteStep[];
 }
 
+export interface DecisionConfidenceBreakdown {
+  level: 'HIGH' | 'MEDIUM' | 'LOW';
+  score: number;
+  known_factors?: string[];
+  unknown_factors?: string[];
+  reasons?: string[];
+  rationale?: string;
+}
+
 export interface OptimizationResult {
   emergency_id: string;
   selected_ambulance: AmbulanceRecommendation;
@@ -110,6 +125,9 @@ export interface OptimizationResult {
   travel_eta: number;
   total_estimated_time: number;
   optimization_reason: string;
+  confidence?: DecisionConfidenceBreakdown;
+  confidence_breakdown?: DecisionConfidenceBreakdown;
+  data_sources?: Record<string, string>;
 }
 
 export interface DecisionExplanation {
@@ -117,6 +135,7 @@ export interface DecisionExplanation {
   hospital_reason: string;
   route_reason: string;
   overall_reason: string;
+  confidence?: DecisionConfidenceBreakdown;
 }
 
 export interface RerouteResult {
@@ -126,6 +145,24 @@ export interface RerouteResult {
   new_eta_minutes: number;
   new_route?: RouteOption;
   old_route?: RouteOption;
+  confidence?: DecisionConfidenceBreakdown;
+}
+
+export interface LocationSearchResult {
+  formatted_address: string;
+  latitude: number;
+  longitude: number;
+  place_name?: string;
+  source: 'USER_GPS' | 'USER_SEARCH' | 'USER_PIN' | 'DEMO' | 'GEOCODED';
+  accuracy_meters?: number;
+}
+
+export interface LocationReverseResult {
+  formatted_address: string;
+  latitude: number;
+  longitude: number;
+  place_name?: string;
+  source: string;
 }
 
 export interface EmergencyAnalysis {
@@ -135,4 +172,68 @@ export interface EmergencyAnalysis {
   severity: Severity;
   location_description: string;
   special_requirements: string[];
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: string;
+}
+
+export interface EmergencyDispatcherState {
+  intent?: 'GREETING' | 'GENERAL_QUESTION' | 'EMERGENCY_REPORT' | 'LOCATION_UPDATE' | 'ANSWER_TO_QUESTION' | 'CONFIRMATION' | 'CANCELLATION' | 'UNKNOWN' | string;
+  conversation_state?: 'IDLE' | 'GREETING' | 'INTAKE_STARTED' | 'COLLECTING_LOCATION' | 'COLLECTING_INCIDENT' | 'COLLECTING_PATIENT_COUNT' | 'COLLECTING_CRITICAL_STATUS' | 'COLLECTING_ROAD_ACCESS' | 'INFORMATION_SUFFICIENT' | 'PLAN_READY' | string;
+  incident_type?: string | null;
+  severity?: Severity;
+  patient_count?: number | null;
+  critical_patient_count?: number | null;
+  location_description?: string | null;
+  location_confirmed?: boolean;
+  road_passability?: string | null;
+  special_requirements?: string[];
+  confidence?: number;
+  missing_information?: string[];
+  has_sufficient_information: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_source?: 'USER_GPS' | 'USER_SEARCH' | 'USER_PIN' | 'DEMO' | string | null;
+  accuracy_meters?: number | null;
+  location_note?: string;
+}
+
+export interface ChatRequest {
+  message: string;
+  conversation_id?: string;
+  history?: ChatMessage[];
+  latitude?: number;
+  longitude?: number;
+  location_source?: string;
+  accuracy_meters?: number;
+}
+
+export interface ChatResponse {
+  reply: string;
+  conversation_id: string;
+  state: EmergencyDispatcherState;
+  has_sufficient_information: boolean;
+  emergency_id?: string;
+  suggested_quick_replies?: string[];
+}
+
+export interface DataSourceItem {
+  name: string;
+  source: string;
+  status: DataStatusLevel;
+  description: string;
+}
+
+export interface DataSourceStatusResponse {
+  traffic: DataSourceItem;
+  hospitals: DataSourceItem;
+  ambulances: DataSourceItem;
+  hospital_capacity: DataSourceItem;
+  road_incidents: DataSourceItem;
+  ai_dispatcher: DataSourceItem;
+  map?: DataSourceItem;
+  database?: DataSourceItem;
 }

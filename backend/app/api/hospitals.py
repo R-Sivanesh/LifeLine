@@ -22,6 +22,16 @@ async def get_hospital(id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Hospital not found")
     return hosp
 
+@router.get("/nearby", summary="Discover nearby hospital facilities via Google Places")
+async def get_nearby_hospitals(latitude: float = 13.0380, longitude: float = 80.2300, radius: int = 8000):
+    from app.services.google_places_service import discover_nearby_hospitals_places
+    places, source, status_val = await discover_nearby_hospitals_places(latitude, longitude, radius)
+    return {
+        "hospitals": places,
+        "source": source,
+        "status": status_val
+    }
+
 @router.post("", response_model=HospitalResponse, status_code=status.HTTP_201_CREATED, summary="Register hospital")
 async def create_hospital(payload: HospitalCreate, db: Session = Depends(get_db)):
     hosp = Hospital(

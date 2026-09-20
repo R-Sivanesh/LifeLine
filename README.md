@@ -1,138 +1,164 @@
-# LifeLine — Intelligent Emergency Response & Routing Platform
+# LifeLine 2.0 — Real-Time Emergency Response Intelligence + Gemini Dispatcher
 
-> **Hackathon Theme**: *Tech for a Better Tomorrow*  
-> **Core Promise**: *"We're not just finding the nearest ambulance. We're finding the fastest reliable path from emergency to appropriate care."*
+> **Core Mission**: *"From Emergency to Appropriate Care — Coordinating conversational AI dispatch, smart ambulance capability matching, verified hospital placement, live traffic routing, and Golden Minute response optimization."*
 
 ---
 
-## 🚑 Project Overview
+## 📌 Architecture & Tech Stack
 
-During critical emergencies, response time and clinical survival rates are governed by a synchronized sequence of decisions:
-1. **What type and severity of emergency is this?** (AI Severity Extraction)
-2. **Which available ambulance has the right clinical capability?** (Smart Ambulance Matching)
-3. **Which hospital is actually ready with trauma & ICU facilities?** (Hospital Ready Check)
-4. **Which route should the vehicle take to avoid active hazards?** (Mapbox Directions & Risk Analysis)
-5. **What happens if the selected route becomes blocked?** (Dynamic Rerouting)
-6. **Why did the system make each recommendation?** (Decision Explainability)
+LifeLine 2.0 is designed as a unified monorepo deploying both the React/Vite frontend and FastAPI backend under a single Vercel project using **Vercel Services**:
 
-**LifeLine** coordinates these decisions in real time to optimize the **Golden Minute** — minimizing total latency from incident occurrence to arrival at appropriate medical care.
+```
+LifeLine/
+├── frontend/             # React + Vite Single Page Application
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── backend/              # Python FastAPI ASGI Backend
+│   ├── app/
+│   │   ├── main.py       # FastAPI application (app)
+│   │   ├── api/          # Routers (/api/health, /api/ai, /api/emergencies, etc.)
+│   │   └── services/     # Gemini, Geocoding, Optimization services
+│   ├── main.py           # Vercel ASGI entrypoint (main:app)
+│   ├── requirements.txt  # Python dependencies (FastAPI, SQLAlchemy, psycopg2-binary)
+│   └── run.py            # Local development runner
+│
+└── vercel.json           # Vercel Services multi-service configuration
+```
+
+### URL Routing Architecture
+- **Web Frontend**: `/` and all client SPA paths (`/emergency/new`, `/simulation`, `/history`) → React / Vite Frontend
+- **API Backend**: `/api/*` → FastAPI Backend Service
+- **API Documentation**: `/api/docs` → Interactive Swagger UI
+
+Both frontend and backend share the same origin domain (e.g. `https://<lifeline>.vercel.app`), eliminating cross-origin CORS barriers while using clean same-origin `/api` calls.
+
+---
+
+## 🚀 Vercel Deployment Guide
+
+Deploying LifeLine to Vercel requires **ONE Vercel Project** utilizing the modern **Vercel Services** multi-service configuration in `vercel.json`:
+
+### `vercel.json` Specification:
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "services": {
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite"
+    },
+    "backend": {
+      "root": "backend",
+      "entrypoint": "main:app"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 🔐 Environment Variables Configuration
+
+Configure these in **Vercel Project Settings → Environment Variables**:
+
+### Backend Secrets (Production)
+| Variable | Description | Required / Fallback |
+|---|---|---|
+| `GEMINI_API_KEY` | Google Gemini API Key for Dispatcher AI | Optional (Falls back to deterministic rule engine) |
+| `GEMINI_MODEL` | Gemini model name (default: `gemini-2.5-flash`) | Optional |
+| `DATABASE_URL` | PostgreSQL Connection URI (e.g. Neon, Supabase) | Optional (Reports `NOT CONFIGURED` if omitted) |
+| `GOOGLE_MAPS_API_KEY` | Google Maps Platform API Key | Optional (Falls back to OpenStreetMap / Mapbox) |
+| `GOOGLE_ROUTES_API_KEY` | Google Routes API Key (Traffic aware) | Optional (Uses Google Maps Key if omitted) |
+| `GOOGLE_PLACES_API_KEY` | Google Places API Key (Hospital search) | Optional (Uses Google Maps Key if omitted) |
+| `DEMO_MODE` | Set `true` to enable demo scenario tools | Optional (Default: `true`) |
+| `FRONTEND_URL` | Deployed frontend origin for CORS | Optional (Default: auto-matches Vercel domains) |
+
+### Frontend Public Variables
+| Variable | Description | Required / Fallback |
+|---|---|---|
+| `VITE_API_BASE_URL` | API Base URL (Set to `/api`) | Required (Default: `/api`) |
+| `VITE_MAPBOX_ACCESS_TOKEN` | Mapbox public GL token (`pk.eyJ...`) | Optional (Falls back to tactical canvas radar) |
+| `VITE_GOOGLE_MAPS_API_KEY` | Client Google Maps JS API key | Optional |
 
 > [!NOTE]
-> **Prototype / Hackathon Disclaimer**: This system utilizes simulated emergency resource, telemetry, and hospital capacity data for demonstration purposes. It does not connect to live municipal 911/108 hardware.
+> Frontend client variables MUST begin with `VITE_`. Backend secrets (like `GEMINI_API_KEY`) must NOT use `VITE_`.
 
 ---
 
-## 📐 Architecture
+## 🗄️ Database Strategy
 
-```mermaid
-graph TD
-    UI[React + Vite + Tailwind + Mapbox GL JS Dashboard] <-->|REST API /api| API[FastAPI Monolithic Backend]
-    
-    subgraph Core Intelligence Engines
-        API --> SE[AI Severity Extraction Engine<br/>OpenAI API + Deterministic Fallback]
-        API --> AM[Ambulance Matching Engine<br/>Capability, Distance, ETA Score]
-        API --> HM[Hospital Ready Check Engine<br/>Trauma, ICU, Bed Capacity Score]
-        API --> RE[Mapbox Route & Risk Engine<br/>Directions API + Spatial Incident Check]
-        API --> GM[Golden Minute Optimizer<br/>Min Total Care Response Time]
-        API --> DR[Dynamic Rerouting Engine<br/>Blockage Detection & Detour Selection]
-    end
-
-    API <--> DB[(PostgreSQL / Local SQLite Database)]
-```
+- **Local Development**: Uses local SQLite (`lifeline.db`).
+- **Production on Vercel**: Connects to any managed PostgreSQL database provided in `DATABASE_URL` (e.g., Neon, Supabase, AWS RDS, Vercel Postgres).
+- **Graceful Zero-Config Fallback**: If `DATABASE_URL` is omitted on Vercel, the app runs safely using ephemeral serverless storage (`/tmp/lifeline.db`) and audits `DATABASE: NOT CONFIGURED` in the provenance audit footer without crashing.
 
 ---
 
-## ⚡ Key Features
+## 💻 Local Development
 
-- **AI Emergency Intake & NLP Extraction**: Converts conversational voice/text transcripts into structured incident metrics (type, patient counts, critical casualties, severity).
-- **Smart Capability-Based Ambulance Matching**: Evaluates vehicles on ALS/ICU capabilities, medical equipment, proximity, and availability rather than naive distance alone.
-- **Hospital Readiness Assessment**: Filters receiving facilities based on Level-1 trauma capability, active ICU capacity, and simulated open emergency beds.
-- **Mapbox Multi-Route Calculation & Risk Assessment**: Dynamically assesses route options against real-time road incidents (accidents, floods, construction) to assign risk levels (`LOW`, `MEDIUM`, `HIGH`, `BLOCKED`).
-- **Golden Minute Optimization**: Deterministically calculates the optimal combination minimizing total estimated response-to-care latency:
-  $$\text{Total Time} = \text{Ambulance ETA} + \text{Transit ETA} + \text{Readiness Penalty}$$
-- **Dynamic Rerouting**: Live triggers safe detours with real-time UI disruption telemetry when an active route is compromised.
-- **Decision Transparency (`[WHY?]`)**: Instant human-readable justification for every dispatch decision.
-- **Emergency Priority Lane Simulator**: Visualizes intersection green-wave preemptions saving up to 3 minutes during transit.
-
----
-
-## 🛠 Tech Stack
-
-- **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, Mapbox GL JS, Lucide Icons, Axios, React Router.
-- **Backend**: Python 3.13, FastAPI, Pydantic V2, SQLAlchemy, Uvicorn, HTTPX.
-- **Database**: PostgreSQL (with automatic zero-config fallback to local SQLite for offline demos).
-- **AI / Maps**: OpenAI API (`gpt-4o-mini`), Mapbox Directions API.
-
----
-
-## 🚀 Quick Start Guide
-
-### Prerequisites
-- Python 3.10+
-- Node.js 18+ and npm
-
-### 1. Environment Setup
-Copy `.env.example` to `.env`:
-```bash
-# Backend / Root .env
-MAPBOX_ACCESS_TOKEN=your_mapbox_token
-OPENAI_API_KEY=your_openai_api_key
-DATABASE_URL=
-FRONTEND_URL=http://localhost:5173
-DEMO_MODE=true
-```
-
-```bash
-# Frontend .env (in frontend/)
-VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_token
-VITE_API_BASE_URL=/api
-```
-
-### 2. Backend Setup
+### 1. Backend Setup
 ```bash
 # Install Python dependencies
 pip install -r backend/requirements.txt
 
-# Run backend server (starts on http://localhost:8000)
+# Run automated tests (20/20 test suite)
+python -m pytest backend/tests
+
+# Start local FastAPI backend (http://localhost:8000)
 python backend/run.py
 ```
-*API documentation automatically available at `http://localhost:8000/docs`.*
 
-### 3. Frontend Setup
+### 2. Frontend Setup
 ```bash
 cd frontend
+
+# Install Node dependencies
 npm install
+
+# Run TypeScript build verification
+npm run build
+
+# Start local Vite dev server (http://localhost:5173)
 npm run dev
 ```
-*Open `http://localhost:5173` in your browser.*
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Verification & Health Checks
 
-Run the backend unit test suite covering severity parsing, ambulance capability scoring, hospital trauma filtering, route risk analysis, and Golden Minute optimization:
+Verify your deployment directly:
 
-```bash
-python -m pytest backend/tests/test_algorithms.py
-```
+- **API Health Check**:
+  ```bash
+  curl https://<your-project>.vercel.app/api/health
+  # Returns: {"status":"ok","service":"LifeLine Emergency Response Platform"}
+  ```
 
----
+- **Data Sources Provenance Audit**:
+  ```bash
+  curl https://<your-project>.vercel.app/api/data/status
+  ```
 
-## 🎬 11-Step Hackathon Hero Demo Flow
+- **Geocoding & Landmark Search**:
+  ```bash
+  curl "https://<your-project>.vercel.app/api/location/search?query=Tambaram"
+  ```
 
-1. **Open Dashboard**: Navigate to `http://localhost:5173` (labeled **DEMO MODE**).
-2. **Review Active Emergency**: Observe "Three people injured in a road accident near the railway bridge. One person is unconscious."
-3. **AI Structured Extraction**: Triage registers `ROAD_ACCIDENT`, `CRITICAL` severity, 3 casualties (1 critical).
-4. **Smart Ambulance Recommendation**: A-102 (Advanced ALS, 6m ETA) selected over nearer Basic unit because critical trauma requires ALS support. Click **`[WHY?]`** to inspect rationale.
-5. **Hospital Ready Check**: City Trauma Center matched for Level-1 trauma capability and ICU availability. Click **`[WHY?]`** to inspect.
-6. **Mapbox Route Analysis**: Compares Route A (High risk accident), Route B (Low risk clear corridor), Route C (Medium risk). Selects Route B.
-7. **Golden Minute Optimization**: Calculates ~16 min total response-to-care time.
-8. **Simulate Road Blockage**: Click **`[ SIMULATE BLOCKAGE ]`**.
-9. **Disruption Alert**: Tactical alert banner activates with `"⚠ ROUTE DISRUPTION DETECTED. Recalculating..."`.
-10. **Dynamic Reroute**: System shifts to Route C (`"✓ NEW ROUTE SELECTED — ETA: 10 min"`).
-11. **Green Corridor Simulation**: Toggle **`[ ACTIVATE GREEN WAVE ]`** to simulate intersection traffic signal priority saving 3 minutes.
-
----
-
-## 📄 License & Hackathon Notes
-Developed for hackathon presentation under the MIT License.
+- **Direct SPA Navigation**:
+  Navigate directly in browser to `/emergency/new`, `/simulation`, `/history` — all routes resolve seamlessly through the client router without 404s.

@@ -76,26 +76,22 @@ async def process_dynamic_reroute(
         )
     )
     
-    reason = "Dynamic reroute: Safe detour selected to bypass active road disruption."
-    if new_selected_route.risk_level == "LOW":
-        reason = f"Alternative route ({new_selected_route.name}) selected because the previous route encountered an active blockage."
-    elif new_selected_route.risk_level == "MEDIUM":
-        reason = f"Route updated to {new_selected_route.name} to avoid critical road blockage."
+    reason = "Previous route was blocked. Alternative route selected based on current route risk and estimated travel time."
         
     # Log route event in database
     route_event = RouteEvent(
         emergency_id=emergency_id,
         event_type="DYNAMIC_REROUTE",
         description=reason,
-        old_route=old_route_obj.dict() if old_route_obj else None,
-        new_route=new_selected_route.dict(),
+        old_route=old_route_obj.model_dump() if old_route_obj else None,
+        new_route=new_selected_route.model_dump(),
         old_eta=old_eta,
         new_eta=new_selected_route.adjusted_eta_minutes
     )
     db.add(route_event)
     
     if dispatch:
-        dispatch.selected_route = new_selected_route.dict()
+        dispatch.selected_route = new_selected_route.model_dump()
         dispatch.estimated_hospital_eta = new_selected_route.adjusted_eta_minutes
         dispatch.total_response_time = round(dispatch.estimated_ambulance_eta + new_selected_route.adjusted_eta_minutes, 1)
         dispatch.reason = reason

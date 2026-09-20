@@ -106,7 +106,7 @@ async def optimize_emergency_flow(id: str, db: Session = Depends(get_db)):
             emergency_id=id,
             ambulance_id=optimization_result.selected_ambulance.ambulance_id,
             hospital_id=optimization_result.selected_hospital.hospital_id,
-            selected_route=optimization_result.selected_route.dict(),
+            selected_route=optimization_result.selected_route.model_dump(),
             estimated_ambulance_eta=optimization_result.ambulance_eta,
             estimated_hospital_eta=optimization_result.travel_eta,
             total_response_time=optimization_result.total_estimated_time,
@@ -116,7 +116,7 @@ async def optimize_emergency_flow(id: str, db: Session = Depends(get_db)):
     else:
         dispatch.ambulance_id = optimization_result.selected_ambulance.ambulance_id
         dispatch.hospital_id = optimization_result.selected_hospital.hospital_id
-        dispatch.selected_route = optimization_result.selected_route.dict()
+        dispatch.selected_route = optimization_result.selected_route.model_dump()
         dispatch.estimated_ambulance_eta = optimization_result.ambulance_eta
         dispatch.estimated_hospital_eta = optimization_result.travel_eta
         dispatch.total_response_time = optimization_result.total_estimated_time

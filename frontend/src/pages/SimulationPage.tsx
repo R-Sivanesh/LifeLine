@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { lifelineApi } from '../services/api';
 import { Header } from '../components/Header';
-import { MapboxMap } from '../components/MapboxMap';
+import { TacticalMap } from '../components/TacticalMap';
 import { RouteAlertBanner } from '../components/RouteAlertBanner';
 import { GreenCorridorSim } from '../components/GreenCorridorSim';
 import {
@@ -344,7 +344,7 @@ export const SimulationPage: React.FC = () => {
 
           {/* Right: Tactical Map Simulation View (7 cols) */}
           <div className="lg:col-span-7 h-[580px] w-full">
-            <MapboxMap
+            <TacticalMap
               emergency={emergency}
               selectedAmbulance={optimization?.selected_ambulance}
               selectedHospital={optimization?.selected_hospital}

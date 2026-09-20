@@ -9,7 +9,11 @@ import {
   OptimizationResult,
   DecisionExplanation,
   RerouteResult,
-  RoadIncident
+  RoadIncident,
+  ChatRequest,
+  ChatResponse,
+  DataSourceStatusResponse,
+  ChatMessage
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -22,9 +26,44 @@ const api = axios.create({
 });
 
 export const lifelineApi = {
-  // Health
+  // Health & Data Provenance
   checkHealth: async () => {
     const res = await api.get('/health');
+    return res.data;
+  },
+
+  getDataSourcesStatus: async (): Promise<DataSourceStatusResponse> => {
+    const res = await api.get('/data/status');
+    return res.data;
+  },
+
+  // Location & Geocoding
+  searchLocation: async (query: string) => {
+    const res = await api.get('/location/search', { params: { query } });
+    return res.data;
+  },
+
+  reverseGeocode: async (lat: number, lng: number) => {
+    const res = await api.get('/location/reverse', { params: { lat, lng } });
+    return res.data;
+  },
+
+  // Gemini AI Dispatcher
+  chatDispatcher: async (data: {
+    message: string;
+    conversation_id?: string;
+    history?: ChatMessage[];
+    latitude?: number;
+    longitude?: number;
+    location_source?: string;
+    accuracy_meters?: number;
+  }): Promise<ChatResponse> => {
+    const res = await api.post('/ai/chat', data);
+    return res.data;
+  },
+
+  analyzeEmergencyText: async (description: string): Promise<EmergencyAnalysis> => {
+    const res = await api.post('/ai/analyze', null, { params: { description } });
     return res.data;
   },
 
@@ -34,6 +73,10 @@ export const lifelineApi = {
     latitude: number;
     longitude: number;
     title?: string;
+    patient_count?: number;
+    critical_patient_count?: number;
+    severity?: string;
+    incident_type?: string;
   }): Promise<Emergency> => {
     const res = await api.post('/emergencies', data);
     return res.data;
@@ -74,6 +117,11 @@ export const lifelineApi = {
     return res.data;
   },
 
+  decideEmergency: async (emergencyId: string): Promise<OptimizationResult> => {
+    const res = await api.post(`/emergencies/${emergencyId}/optimize`);
+    return res.data;
+  },
+
   getDecisionExplanation: async (emergencyId: string): Promise<DecisionExplanation> => {
     const res = await api.get(`/emergencies/${emergencyId}/decision`);
     return res.data;
@@ -81,6 +129,21 @@ export const lifelineApi = {
 
   triggerReroute: async (emergencyId: string): Promise<RerouteResult> => {
     const res = await api.post(`/emergencies/${emergencyId}/reroute`);
+    return res.data;
+  },
+
+  // Live Google Places & Routes
+  getNearbyHospitals: async (latitude: number, longitude: number, radius: number = 8000) => {
+    const res = await api.get('/hospitals/nearby', {
+      params: { latitude, longitude, radius }
+    });
+    return res.data;
+  },
+
+  getLiveRoute: async (origLat: number, origLon: number, destLat: number, destLon: number) => {
+    const res = await api.get('/routes/live', {
+      params: { orig_lat: origLat, orig_lon: origLon, dest_lat: destLat, dest_lon: destLon }
+    });
     return res.data;
   },
 

@@ -89,12 +89,12 @@ export const GreenCorridorSim: React.FC = () => {
 
         <div className="flex items-center gap-1.5 text-emerald-400 font-mono font-bold">
           <Clock className="h-3.5 w-3.5" />
-          <span>{corridorActive ? 'SAVING ~3.0 MINUTES IN GOLDEN HOUR' : 'READY FOR ACTIVATION'}</span>
+          <span>{corridorActive ? 'MODELED 3-MINUTE REDUCTION IN INTERSECTION DELAY' : 'READY FOR ACTIVATION'}</span>
         </div>
       </div>
 
-      <div className="mt-2 text-[10px] text-zinc-500 italic text-right">
-        * Simulation only — no real traffic infrastructure connected.
+      <div className="mt-2 text-[10px] text-amber-400/80 font-mono uppercase tracking-wider text-right">
+        * SIMULATION ONLY — NO REAL TRAFFIC SIGNALS ARE CONTROLLED
       </div>
     </div>
   );

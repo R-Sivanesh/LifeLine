@@ -123,6 +123,17 @@ async def fetch_mapbox_routes(origin: Coordinate, destination: Coordinate) -> Li
                                 steps=steps_list
                             )
                         )
+                    if len(parsed_routes) == 1:
+                        # Add a distinct secondary alternative corridor
+                        fallback_alts = generate_interpolated_fallback_routes(origin, destination)
+                        if len(fallback_alts) > 1:
+                            parsed_routes.append(fallback_alts[1])
+                            parsed_routes.append(fallback_alts[2])
+                    elif len(parsed_routes) == 2:
+                        fallback_alts = generate_interpolated_fallback_routes(origin, destination)
+                        if len(fallback_alts) > 2:
+                            parsed_routes.append(fallback_alts[2])
+
                     return parsed_routes
     except Exception as e:
         logger.warning(f"Mapbox Directions API failed ({str(e)}). Using synthesized route fallback.")

@@ -40,17 +40,17 @@ def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[A
         if is_critical:
             if amb.capability == "ICU":
                 score += 40
-                reasons.append("Full ICU life-support capability for critical patients")
+                reasons.append("Selected because it is available and has the required emergency capability (Mobile ICU)")
             elif amb.capability == "ADVANCED":
                 score += 38
-                reasons.append("Advanced emergency capability matched for high-severity incident")
+                reasons.append("Selected because it is available and has the required emergency capability (Advanced ALS)")
             else: # BASIC
                 score += 12
                 reasons.append("Basic capability (lower support for critical trauma/injury)")
         else:
             if amb.capability in ("BASIC", "ADVANCED", "ICU"):
                 score += 35
-                reasons.append(f"{amb.capability.capitalize()} capability suitable for patient condition")
+                reasons.append(f"Selected because it is available and has the required emergency capability ({amb.capability.capitalize()})")
         
         # 2. Proximity & ETA Score (0 - 35 points)
         proximity_score = max(0.0, 35.0 - (eta * 2.2))

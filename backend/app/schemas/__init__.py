@@ -154,7 +154,89 @@ class RouteRiskResponse(BaseModel):
     incidents: List[Dict[str, Any]]
     adjusted_eta_minutes: float
 
+# ==================== LOCATION & GEOCODING SCHEMAS ====================
+class LocationSearchResult(BaseModel):
+    formatted_address: str
+    latitude: float
+    longitude: float
+    place_name: Optional[str] = ""
+    source: str = "GEOCODED"  # USER_GPS, USER_SEARCH, USER_PIN, DEMO
+    accuracy_meters: Optional[float] = None
+
+class LocationReverseResult(BaseModel):
+    formatted_address: str
+    latitude: float
+    longitude: float
+    place_name: Optional[str] = ""
+    source: str = "USER_PIN"
+
+# ==================== CHAT & GEMINI DISPATCHER SCHEMAS ====================
+class ChatMessage(BaseModel):
+    role: str  # 'user', 'assistant', 'system'
+    content: str
+    timestamp: Optional[datetime] = None
+
+class EmergencyDispatcherState(BaseModel):
+    intent: str = "UNKNOWN"  # GREETING, GENERAL_QUESTION, EMERGENCY_REPORT, LOCATION_UPDATE, ANSWER_TO_QUESTION, CONFIRMATION, CANCELLATION, UNKNOWN
+    conversation_state: str = "IDLE"  # IDLE, GREETING, INTAKE_STARTED, COLLECTING_LOCATION, COLLECTING_INCIDENT, COLLECTING_PATIENT_COUNT, COLLECTING_CRITICAL_STATUS, COLLECTING_ROAD_ACCESS, INFORMATION_SUFFICIENT, PLAN_READY
+    incident_type: Optional[str] = None  # ROAD_ACCIDENT, CARDIAC_ARREST, STROKE, FIRE_BURN, TRAUMA_INJURY, MEDICAL_EMERGENCY or None
+    severity: str = "MEDIUM"  # LOW, MEDIUM, HIGH, CRITICAL
+    patient_count: Optional[int] = None
+    critical_patient_count: Optional[int] = None
+    location_description: Optional[str] = None
+    location_confirmed: bool = False
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    location_source: Optional[str] = None  # USER_GPS, USER_SEARCH, USER_PIN, DEMO
+    accuracy_meters: Optional[float] = None
+    road_passability: Optional[str] = None  # PASSABLE, PARTIAL, BLOCKED, UNKNOWN
+    special_requirements: List[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    missing_information: List[str] = Field(default_factory=list)
+    has_sufficient_information: bool = False
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation_id: Optional[str] = None
+    history: List[ChatMessage] = Field(default_factory=list)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    location_source: Optional[str] = None
+    accuracy_meters: Optional[float] = None
+
+class ChatResponse(BaseModel):
+    reply: str
+    conversation_id: str
+    state: EmergencyDispatcherState
+    has_sufficient_information: bool
+    emergency_id: Optional[str] = None
+    suggested_quick_replies: List[str] = Field(default_factory=list)
+
+# ==================== DATA SOURCE PROVENANCE SCHEMAS ====================
+class DataSourceItem(BaseModel):
+    name: str
+    source: str
+    status: str  # LIVE, SIMULATED, UNKNOWN, DERIVED
+    description: str
+
+class DataSourceStatusResponse(BaseModel):
+    traffic: DataSourceItem
+    hospitals: DataSourceItem
+    ambulances: DataSourceItem
+    hospital_capacity: DataSourceItem
+    road_incidents: DataSourceItem
+    ai_dispatcher: DataSourceItem
+    map: Optional[DataSourceItem] = None
+    database: Optional[DataSourceItem] = None
+
 # ==================== OPTIMIZATION & DISPATCH SCHEMAS ====================
+class DecisionConfidenceBreakdown(BaseModel):
+    level: str  # HIGH, MEDIUM, LOW
+    score: float
+    known_factors: List[str] = Field(default_factory=list)
+    unknown_factors: List[str] = Field(default_factory=list)
+    rationale: str
+
 class OptimizationResponse(BaseModel):
     emergency_id: str
     selected_ambulance: AmbulanceRecommendation
@@ -165,12 +247,15 @@ class OptimizationResponse(BaseModel):
     travel_eta: float
     total_estimated_time: float
     optimization_reason: str
+    confidence: Optional[DecisionConfidenceBreakdown] = None
+    data_sources: Optional[Dict[str, str]] = None
 
 class DecisionExplanationResponse(BaseModel):
     ambulance_reason: str
     hospital_reason: str
     route_reason: str
     overall_reason: str
+    confidence: Optional[DecisionConfidenceBreakdown] = None
 
 class RerouteResponse(BaseModel):
     rerouted: bool
@@ -179,3 +264,4 @@ class RerouteResponse(BaseModel):
     new_eta_minutes: float
     new_route: Optional[RouteOption] = None
     old_route: Optional[RouteOption] = None
+    confidence: Optional[DecisionConfidenceBreakdown] = None
