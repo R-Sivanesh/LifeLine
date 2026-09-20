@@ -22,13 +22,6 @@ def ensure_db():
         except Exception as e:
             print(f"DB bootstrap notice: {e}")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Print configuration status audit (without exposing secrets)
-    settings.print_startup_banner()
-    init_db()
-    yield
-
 app = FastAPI(
     title="LifeLine — Intelligent Emergency Response & Routing Platform",
     description=(
@@ -39,8 +32,7 @@ app = FastAPI(
     version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
-    lifespan=lifespan
+    openapi_url="/api/openapi.json"
 )
 
 # CORS configuration
