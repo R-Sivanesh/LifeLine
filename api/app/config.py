@@ -39,37 +39,21 @@ class Settings(BaseSettings):
     GOOGLE_PLACES_API_KEY: str = os.getenv("GOOGLE_PLACES_API_KEY", os.getenv("GOOGLE_MAPS_API_KEY", ""))
     
     # Database & Environment
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    DATABASE_URL: str = ""
+    FRONTEND_URL: str = "http://localhost:5173"
     DEMO_MODE: bool = True
     IS_VERCEL: bool = False
-    
-    # SQLite fallback location if DATABASE_URL is empty (safely defaults to /tmp if in serverless or read-only root)
     SQLITE_DB_PATH: str = os.path.join(tempfile.gettempdir(), "lifeline.db")
 
-    @field_validator("DEMO_MODE", mode="before")
-    @classmethod
-    def parse_demo_mode(cls, v: Any) -> bool:
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, str):
-            clean = v.strip().lower()
-            if not clean:
-                return True
-            return clean in ("true", "1", "t", "yes")
-        return bool(v)
-
-    @field_validator("IS_VERCEL", mode="before")
-    @classmethod
-    def parse_is_vercel(cls, v: Any) -> bool:
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, str):
-            clean = v.strip().lower()
-            if not clean:
-                return bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
-            return clean in ("true", "1", "t", "yes")
-        return bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
+    def __init__(self, **values):
+        super().__init__(**values)
+        if os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"):
+            self.IS_VERCEL = True
+        demo_env = os.getenv("DEMO_MODE", "").strip().lower()
+        if demo_env in ("false", "0", "no"):
+            self.DEMO_MODE = False
+        else:
+            self.DEMO_MODE = True
 
     def get_allowed_origins(self) -> List[str]:
         origins = [
