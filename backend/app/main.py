@@ -74,11 +74,12 @@ app.include_router(routes.router)
 app.include_router(demo.router)
 
 @app.get("/", summary="Root index")
+@app.get("/api", summary="API index")
 def read_root():
     return {
         "platform": "LifeLine Emergency Response Intelligence",
         "status": "online",
         "demo_mode": settings.DEMO_MODE,
-        "docs": "/docs",
+        "docs": "/api/docs",
         "api_prefix": "/api"
     }

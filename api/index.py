@@ -2,15 +2,17 @@ import sys
 import os
 from pathlib import Path
 
-# Ensure root and backend directory are in python path
-root_dir = Path(__file__).resolve().parent.parent
+# Ensure Vercel serverless marker is set before loading app modules
+os.environ["VERCEL"] = "1"
+
+# Add backend and root directories to Python search path
+current_dir = Path(__file__).resolve().parent
+root_dir = current_dir.parent
 backend_dir = root_dir / "backend"
 
-for p in (str(backend_dir), str(root_dir)):
-    if p not in sys.path:
+for p in (str(backend_dir), str(root_dir), str(current_dir)):
+    if os.path.exists(p) and p not in sys.path:
         sys.path.insert(0, p)
-
-os.environ["VERCEL"] = "1"
 
 # Import FastAPI application
 from app.main import app
@@ -27,3 +29,6 @@ try:
         db.close()
 except Exception as err:
     print(f"Serverless cold start bootstrap notice: {err}")
+
+# Expose both app and handler for Vercel Python runtime
+handler = app

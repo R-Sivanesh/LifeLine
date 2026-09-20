@@ -34,10 +34,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "t")
-    IS_VERCEL: bool = bool(os.getenv("VERCEL") in ("1", "true", "True") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    IS_VERCEL: bool = bool(os.getenv("VERCEL") in ("1", "true", "True") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
     
-    # SQLite fallback location if DATABASE_URL is empty
-    SQLITE_DB_PATH: str = os.path.join(tempfile.gettempdir(), "lifeline.db") if (os.getenv("VERCEL") in ("1", "true", "True") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")) else str(Path(__file__).resolve().parent.parent / "lifeline.db")
+    # SQLite fallback location if DATABASE_URL is empty (safely defaults to /tmp if in serverless or read-only root)
+    SQLITE_DB_PATH: str = os.path.join(tempfile.gettempdir(), "lifeline.db")
 
     def get_allowed_origins(self) -> List[str]:
         origins = [
