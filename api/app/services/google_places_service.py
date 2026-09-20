@@ -41,72 +41,90 @@ async def discover_nearby_hospitals_places(
             "X-Goog-Api-Key": key,
             "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.formattedAddress,places.businessStatus,places.types,places.rating,places.userRatingCount,places.nationalPhoneNumber"
         }
-        payload = {
-            "includedTypes": ["hospital"],
-            "maxResultCount": 10,
-            "locationRestriction": {
-                "circle": {
-                    "center": {
-                        "latitude": latitude,
-                        "longitude": longitude
-                    },
-                    "radius": min(max(float(radius_meters), 1000.0), 50000.0)
+        
+        # Search with initial radius, expanding if necessary
+        effective_radius = min(max(float(radius_meters), 3000.0), 50000.0)
+        
+        async def fetch_places(rad: float):
+            payload = {
+                "includedTypes": ["hospital"],
+                "maxResultCount": 20,
+                "locationRestriction": {
+                    "circle": {
+                        "center": {
+                            "latitude": latitude,
+                            "longitude": longitude
+                        },
+                        "radius": rad
+                    }
                 }
             }
-        }
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                return await client.post(url, json=payload, headers=headers)
 
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    places = data.get("places", [])
-                    discovered: List[Dict[str, Any]] = []
-                    
-                    for p in places:
-                        loc = p.get("location", {})
-                        h_lat = loc.get("latitude")
-                        h_lon = loc.get("longitude")
-                        if h_lat is None or h_lon is None:
-                            continue
-                            
-                        dist = calculate_haversine_distance(latitude, longitude, h_lat, h_lon)
-                        p_id = p.get("id", "")
-                        name = p.get("displayName", {}).get("text", "Hospital Facility")
-                        address = p.get("formattedAddress", "")
-                        phone = p.get("nationalPhoneNumber", "")
-                        b_status = p.get("businessStatus", "OPERATIONAL")
-                        rating = p.get("rating")
+            resp = await fetch_places(effective_radius)
+            if resp.status_code == 200:
+                data = resp.json()
+                places = data.get("places", [])
+                
+                # If no hospitals found in immediate radius, attempt expanded radius up to 25km
+                if not places and effective_radius < 25000.0:
+                    logger.info(f"[Google Places] 0 hospitals within {effective_radius}m. Expanding search to 25,000m.")
+                    expanded_resp = await fetch_places(25000.0)
+                    if expanded_resp.status_code == 200:
+                        places = expanded_resp.json().get("places", [])
+
+                discovered: List[Dict[str, Any]] = []
+                for p in places:
+                    loc = p.get("location", {})
+                    h_lat = loc.get("latitude")
+                    h_lon = loc.get("longitude")
+                    if h_lat is None or h_lon is None:
+                        continue
                         
-                        discovered.append({
-                            "id": f"places/{p_id}" if not p_id.startswith("places/") else p_id,
-                            "place_id": p_id,
-                            "name": name,
-                            "latitude": h_lat,
-                            "longitude": h_lon,
-                            "address": address,
-                            "phone": phone,
-                            "business_status": b_status,
-                            "rating": rating,
-                            "distance_km": round(dist, 2),
-                            "distance_meters": round(dist * 1000, 0),
-                            "source": "GOOGLE_PLACES",
-                            "status": "LIVE",
-                            # Data Honesty: Clinical parameters are unknown in public search
-                            "capacity_status": "UNKNOWN",
-                            "trauma_capable": None,
-                            "icu_available": None,
-                            "available_beds": None
-                        })
+                    dist = calculate_haversine_distance(latitude, longitude, h_lat, h_lon)
+                    p_id = p.get("id", "")
+                    name = p.get("displayName", {}).get("text", "Hospital Facility")
+                    address = p.get("formattedAddress", "")
+                    phone = p.get("nationalPhoneNumber", "")
+                    b_status = p.get("businessStatus", "OPERATIONAL")
+                    rating = p.get("rating")
                     
-                    # Sort by distance
-                    discovered.sort(key=lambda h: h["distance_km"])
-                    
+                    discovered.append({
+                        "id": f"places/{p_id}" if not p_id.startswith("places/") else p_id,
+                        "place_id": p_id,
+                        "name": name,
+                        "latitude": h_lat,
+                        "longitude": h_lon,
+                        "address": address,
+                        "phone": phone,
+                        "business_status": b_status,
+                        "rating": rating,
+                        "distance_km": round(dist, 2),
+                        "distance_meters": round(dist * 1000, 0),
+                        "source": "GOOGLE_PLACES",
+                        "status": "LIVE",
+                        # Data Honesty: Clinical parameters are unknown in public search
+                        "capacity_status": "UNKNOWN",
+                        "trauma_capable": None,
+                        "icu_available": None,
+                        "available_beds": None
+                    })
+                
+                # Sort by straight-line distance
+                discovered.sort(key=lambda h: h["distance_km"])
+                
+                logger.info(f"[Google Places] Nearby search at ({latitude:.6f}, {longitude:.6f}) returned {len(discovered)} verified hospitals.")
+                
+                if discovered:
                     _PLACES_CACHE[cache_key] = (discovered, "GOOGLE_PLACES", "LIVE")
                     return discovered, "GOOGLE_PLACES", "LIVE", None
                 else:
-                    logger.warning(f"Google Places API (New) returned HTTP {resp.status_code}: {resp.text[:150]}")
-                    return [], "GOOGLE_PLACES", "DEGRADED", f"Google Places API request failed with status {resp.status_code}"
+                    return [], "GOOGLE_PLACES", "LIVE", None
+            else:
+                logger.warning(f"Google Places API (New) returned HTTP {resp.status_code}: {resp.text[:150]}")
+                return [], "GOOGLE_PLACES", "DEGRADED", f"Google Places API request failed with status {resp.status_code}"
         except Exception as e:
             logger.warning(f"Google Places API connection failed ({str(e)}).")
             return [], "GOOGLE_PLACES", "DEGRADED", f"Google Places connection error: {str(e)}"

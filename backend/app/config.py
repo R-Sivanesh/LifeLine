@@ -34,9 +34,9 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     
     # Google Maps Platform (Routes, Places, Maps JS)
-    GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
-    GOOGLE_ROUTES_API_KEY: str = os.getenv("GOOGLE_ROUTES_API_KEY", os.getenv("GOOGLE_MAPS_API_KEY", ""))
-    GOOGLE_PLACES_API_KEY: str = os.getenv("GOOGLE_PLACES_API_KEY", os.getenv("GOOGLE_MAPS_API_KEY", ""))
+    GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyDqWcoxKb3GZoOpaYSZtpB2SqhofiFUy7o")
+    GOOGLE_ROUTES_API_KEY: str = os.getenv("GOOGLE_ROUTES_API_KEY", os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyDqWcoxKb3GZoOpaYSZtpB2SqhofiFUy7o"))
+    GOOGLE_PLACES_API_KEY: str = os.getenv("GOOGLE_PLACES_API_KEY", os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyDqWcoxKb3GZoOpaYSZtpB2SqhofiFUy7o"))
     
     # Database & Environment
     DATABASE_URL: str = ""

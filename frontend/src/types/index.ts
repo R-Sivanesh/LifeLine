@@ -178,11 +178,16 @@ export interface OptimizationResult {
   emergency_id: string;
   selected_ambulance?: AmbulanceRecommendation | null;
   selected_hospital: HospitalRecommendation;
+  hospital_candidates?: HospitalRecommendation[];
   selected_route: RouteOption;
   alternative_routes: RouteOption[];
   ambulance_eta: number;
   travel_eta: number;
   total_estimated_time: number;
+  straight_line_distance_km?: number;
+  route_distance_km?: number;
+  route_status_flag?: 'VERIFIED' | 'ROUTE_UNAVAILABLE_NEEDS_VERIFICATION' | string;
+  route_warning?: string | null;
   optimization_reason: string;
   has_live_ambulance?: boolean;
   no_ambulance_reason?: string | null;

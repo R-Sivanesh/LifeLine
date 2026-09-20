@@ -209,6 +209,15 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
         const accuracy = Math.round(pos.coords.accuracy);
+        const timestamp = new Date(pos.timestamp).toISOString();
+
+        console.log(`[LifeLine GPS] Acquired:`, {
+          user_latitude: lat,
+          user_longitude: lon,
+          location_source: 'USER_GPS',
+          location_accuracy_meters: accuracy,
+          timestamp: timestamp
+        });
 
         let formatted = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
         try {
@@ -235,9 +244,10 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
       },
       (err) => {
         setIsLocating(false);
-        setLocationError(`Location permission denied or unavailable (${err.message}). You can type your location below.`);
+        console.warn('[LifeLine GPS] Error:', err);
+        setLocationError(`GPS Location failed (${err.message}). Please allow browser location permissions or search your location below.`);
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -256,6 +266,12 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
   };
 
   const handleSelectSearchResult = (loc: LocationSearchResult) => {
+    console.log(`[LifeLine Location] Selected Landmark/Address:`, {
+      user_latitude: loc.latitude,
+      user_longitude: loc.longitude,
+      location_source: 'USER_SEARCH',
+      address: loc.formatted_address
+    });
     setCurrentLocation({
       ...loc,
       source: 'USER_SEARCH'
@@ -267,16 +283,29 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
 
   // 3. Execution: Run Optimization
   const handleStartAnalysis = async () => {
+    if (!currentLocation || currentLocation.latitude === undefined || currentLocation.longitude === undefined) {
+      setLocationError('Valid emergency origin location is required before starting response.');
+      setCurrentStep('COLLECTING_LOCATION');
+      return;
+    }
+
     setCurrentStep('ANALYZING');
     setAnalysisProgress(15);
 
     try {
-      const targetLat = currentLocation?.latitude || 13.0380;
-      const targetLon = currentLocation?.longitude || 80.2300;
+      const targetLat = currentLocation.latitude;
+      const targetLon = currentLocation.longitude;
+
+      console.log(`[LifeLine Dispatch] Creating emergency with origin coordinates:`, {
+        latitude: targetLat,
+        longitude: targetLon,
+        source: currentLocation.source,
+        accuracy_meters: currentLocation.accuracy_meters
+      });
 
       // Create emergency record
       const emg = await lifelineApi.createEmergency({
-        description: incidentDesc || `${incidentType.replace('_', ' ')}: ${currentLocation?.formatted_address || 'Incident Scene'}`,
+        description: incidentDesc || `${incidentType.replace('_', ' ')}: ${currentLocation.formatted_address || 'Incident Scene'}`,
         latitude: targetLat,
         longitude: targetLon,
         patient_count: patientCount,
@@ -302,7 +331,7 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
       }, 500);
     } catch (err) {
       console.error('Optimization failed:', err);
-      alert('LifeLine response service is temporarily unavailable.');
+      alert('LifeLine response calculation error. Please retry or check location permissions.');
       setCurrentStep('READY_FOR_ANALYSIS');
     }
   };
@@ -802,6 +831,42 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
       {/* ========================================================================= */}
       {currentStep === 'PLAN_READY' && optimization && (
         <div className="space-y-5 animate-fadeIn">
+          {/* Source Transparency Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] font-mono">
+            <div className="bg-zinc-900/90 border border-zinc-800 p-2 rounded-lg">
+              <span className="text-zinc-500 block">USER LOCATION</span>
+              <span className="font-bold text-cyan-400">LIVE • {currentLocation?.source || 'USER_GPS'}</span>
+            </div>
+            <div className="bg-zinc-900/90 border border-zinc-800 p-2 rounded-lg">
+              <span className="text-zinc-500 block">HOSPITALS</span>
+              <span className="font-bold text-emerald-400">LIVE • Google Places</span>
+            </div>
+            <div className="bg-zinc-900/90 border border-zinc-800 p-2 rounded-lg">
+              <span className="text-zinc-500 block">ROUTING</span>
+              <span className="font-bold text-blue-400">DERIVED • Google Routes</span>
+            </div>
+            <div className="bg-zinc-900/90 border border-zinc-800 p-2 rounded-lg">
+              <span className="text-zinc-500 block">AMBULANCE</span>
+              <span className={`font-bold ${optimization.has_live_ambulance ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {optimization.has_live_ambulance ? 'LIVE • GPS Unit' : 'NO LIVE TELEMETRY'}
+              </span>
+            </div>
+          </div>
+
+          {/* Route Sanity Discrepancy Alert */}
+          {optimization.route_status_flag === 'ROUTE_UNAVAILABLE_NEEDS_VERIFICATION' && (
+            <div className="p-4 bg-amber-950/70 border border-amber-500 rounded-xl space-y-1.5 shadow-lg">
+              <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase font-mono">
+                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                <span>ROUTE UNAVAILABLE / NEEDS VERIFICATION</span>
+              </div>
+              <p className="text-xs text-amber-200/90 leading-relaxed">
+                {optimization.route_warning ||
+                  'The computed driving duration is physically anomalous compared to the straight-line distance. Driving conditions require manual verification.'}
+              </p>
+            </div>
+          )}
+
           {optimization.has_live_ambulance && optimization.selected_ambulance ? (
             <>
               <div className="flex items-center justify-between">
@@ -852,30 +917,62 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                   </div>
                 </div>
 
-                {/* 2. Real Destination Hospital */}
-                <div className="flex items-center justify-between p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-lg">
-                      🏥
-                    </div>
-                    <div>
-                      <div className="font-bold text-sm text-white truncate max-w-[200px] sm:max-w-xs">
-                        {optimization.selected_hospital.name}
+                {/* 2. Real Destination Hospital (Recommended) */}
+                <div className="p-3.5 bg-zinc-950/80 border border-emerald-500/40 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-lg">
+                        🏥
                       </div>
-                      <div className="text-xs text-emerald-400/90 mt-0.5 font-mono text-[11px]">
-                        LIVE • Google Places (New)
+                      <div>
+                        <div className="text-[10px] font-mono text-emerald-400 font-bold uppercase">RECOMMENDED RECEIVING HOSPITAL</div>
+                        <div className="font-bold text-sm text-white truncate max-w-[200px] sm:max-w-xs">
+                          {optimization.selected_hospital.name}
+                        </div>
+                        <div className="text-xs text-zinc-400 mt-0.5 font-mono text-[11px]">
+                          {optimization.selected_hospital.distance_km?.toFixed(1) || optimization.straight_line_distance_km?.toFixed(1) || '0'} km away • Live Google Places
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-mono font-bold text-emerald-400">
-                      {optimization.travel_eta.toFixed(0)} min
+                    <div className="text-right">
+                      <div className="text-lg font-mono font-bold text-emerald-400">
+                        {optimization.travel_eta.toFixed(0)} min
+                      </div>
+                      <div className="text-[10px] text-zinc-500 uppercase font-mono">Driving Time</div>
                     </div>
-                    <div className="text-[10px] text-zinc-500 uppercase font-mono">Transit ETA</div>
                   </div>
                 </div>
 
-                {/* 3. Explanation */}
+                {/* 3. Other Verified Hospital Options if available */}
+                {optimization.hospital_candidates && optimization.hospital_candidates.length > 1 && (
+                  <div className="pt-2 border-t border-zinc-800 space-y-2">
+                    <div className="text-xs font-mono font-bold text-zinc-400 uppercase">
+                      OTHER VERIFIED OPTIONS:
+                    </div>
+                    <div className="space-y-1.5">
+                      {optimization.hospital_candidates
+                        .filter((h) => h.name !== optimization.selected_hospital.name && h.hospital_id !== optimization.selected_hospital.hospital_id)
+                        .slice(0, 4)
+                        .map((cand, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-2.5 bg-zinc-950/50 border border-zinc-800/80 rounded-lg text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-zinc-500 font-mono">#{idx + 2}</span>
+                              <span className="font-bold text-zinc-200">{cand.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 font-mono">
+                              <span className="text-zinc-400 text-[11px]">{cand.distance_km?.toFixed(1)} km</span>
+                              <span className="text-emerald-400 font-bold">~{cand.eta_minutes.toFixed(0)} min</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Explanation */}
                 {explanation && (
                   <div className="p-3 bg-zinc-950/50 border border-zinc-800/80 rounded-xl text-xs space-y-1.5 font-sans">
                     <div className="font-bold font-mono text-zinc-400 uppercase text-[11px] flex items-center gap-1">
@@ -915,20 +1012,20 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                 </div>
               </div>
 
-              {/* Destination Hospital is Still Discovered */}
+              {/* Destination Hospital (Recommended) */}
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-xl space-y-3">
-                <div className="text-xs font-mono text-zinc-400 uppercase font-bold">
-                  Nearest Verified Receiving Hospital:
+                <div className="text-xs font-mono text-emerald-400 uppercase font-bold">
+                  RECOMMENDED RECEIVING HOSPITAL:
                 </div>
-                <div className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
+                <div className="flex items-center justify-between p-3.5 bg-zinc-950 border border-emerald-500/30 rounded-xl">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">🏥</span>
                     <div>
                       <div className="font-bold text-sm text-white">
                         {optimization.selected_hospital.name}
                       </div>
-                      <div className="text-xs text-emerald-400 font-mono">
-                        LIVE • Google Places (New)
+                      <div className="text-xs text-zinc-400 font-mono">
+                        {optimization.selected_hospital.distance_km?.toFixed(1) || optimization.straight_line_distance_km?.toFixed(1) || '0'} km away • LIVE Google Places
                       </div>
                     </div>
                   </div>
@@ -939,6 +1036,35 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                     <div className="text-[10px] text-zinc-500 uppercase font-mono">Driving Time</div>
                   </div>
                 </div>
+
+                {/* Other Verified Options */}
+                {optimization.hospital_candidates && optimization.hospital_candidates.length > 1 && (
+                  <div className="pt-2 border-t border-zinc-800 space-y-2">
+                    <div className="text-xs font-mono font-bold text-zinc-400 uppercase">
+                      OTHER VERIFIED OPTIONS:
+                    </div>
+                    <div className="space-y-1.5">
+                      {optimization.hospital_candidates
+                        .filter((h) => h.name !== optimization.selected_hospital.name && h.hospital_id !== optimization.selected_hospital.hospital_id)
+                        .slice(0, 4)
+                        .map((cand, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-2.5 bg-zinc-950/50 border border-zinc-800/80 rounded-lg text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-zinc-500 font-mono">#{idx + 2}</span>
+                              <span className="font-bold text-zinc-200">{cand.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 font-mono">
+                              <span className="text-zinc-400 text-[11px]">{cand.distance_km?.toFixed(1)} km</span>
+                              <span className="text-emerald-400 font-bold">~{cand.eta_minutes.toFixed(0)} min</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Actions for User */}

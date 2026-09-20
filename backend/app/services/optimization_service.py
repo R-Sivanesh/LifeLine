@@ -80,7 +80,7 @@ async def run_golden_minute_optimization(
 
     # 2. Live Hospital Discovery (Google Places API New)
     places_list, hospital_source, hospital_status, _ = await discover_nearby_hospitals_places(
-        emergency.latitude, emergency.longitude, radius_meters=8000.0
+        emergency.latitude, emergency.longitude, radius_meters=12000.0
     )
 
     if places_list and hospital_status == "LIVE":
@@ -120,9 +120,23 @@ async def run_golden_minute_optimization(
     selected_route = assessed_routes[0]
     alternative_routes = assessed_routes[1:] if len(assessed_routes) > 1 else []
     
+    # Distance sanity check
+    from app.services.ambulance_service import calculate_haversine_distance
+    straight_line_dist = round(calculate_haversine_distance(
+        emergency.latitude, emergency.longitude, top_hosp.latitude, top_hosp.longitude
+    ), 2)
+    
+    travel_eta = selected_route.adjusted_eta_minutes
+    route_status_flag = "VERIFIED"
+    route_warning = None
+    
+    if (straight_line_dist < 15.0 and travel_eta > 90.0) or (straight_line_dist < 30.0 and travel_eta > 180.0):
+        route_status_flag = "ROUTE_UNAVAILABLE_NEEDS_VERIFICATION"
+        route_warning = f"Discrepancy detected: Straight-line distance is {straight_line_dist:.1f} km, but routing returned an unexpected {travel_eta:.0f} min duration. Corridor requires manual verification."
+        logger.warning(f"[Sanity Check] {route_warning}")
+
     # 5. Total Care Latency calculation
     ambulance_eta = top_amb.eta_minutes if top_amb else 0.0
-    travel_eta = selected_route.adjusted_eta_minutes
     total_time = round(ambulance_eta + travel_eta, 1)
     
     # 6. Data Provenance & Confidence Calculation
@@ -140,7 +154,7 @@ async def run_golden_minute_optimization(
     if not has_live_amb:
         unknown_factors.append("Real-time ambulance GPS location (Awaiting active unit stream)")
     
-    confidence_level = "HIGH" if (traffic_status == "LIVE" and hospital_status == "LIVE" and has_live_amb) else "MEDIUM"
+    confidence_level = "HIGH" if (traffic_status == "LIVE" and hospital_status == "LIVE" and has_live_amb and route_status_flag == "VERIFIED") else "MEDIUM"
     confidence_score = 0.94 if confidence_level == "HIGH" else 0.75
     
     conf_obj = DecisionConfidenceBreakdown(
@@ -174,11 +188,16 @@ async def run_golden_minute_optimization(
         emergency_id=emergency.id,
         selected_ambulance=top_amb,
         selected_hospital=top_hosp,
+        hospital_candidates=ranked_hosps,
         selected_route=selected_route,
         alternative_routes=alternative_routes,
         ambulance_eta=ambulance_eta,
         travel_eta=travel_eta,
         total_estimated_time=total_time,
+        straight_line_distance_km=straight_line_dist,
+        route_distance_km=selected_route.distance_km,
+        route_status_flag=route_status_flag,
+        route_warning=route_warning,
         optimization_reason=opt_reason,
         has_live_ambulance=has_live_amb,
         no_ambulance_reason=no_amb_reason,

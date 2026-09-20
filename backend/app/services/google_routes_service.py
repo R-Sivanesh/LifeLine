@@ -103,9 +103,20 @@ async def compute_google_routes(
     Queries Google Routes API for live traffic-aware routing between incident and hospital.
     Returns (routes, data_source, traffic_status).
     """
+    straight_dist_km = round(calculate_haversine_distance(
+        origin.latitude, origin.longitude, destination.latitude, destination.longitude
+    ), 2)
+    
+    logger.info(
+        f"[Google Routes] Requesting Route: "
+        f"Origin=({origin.latitude:.6f}, {origin.longitude:.6f}) -> "
+        f"Destination=({destination.latitude:.6f}, {destination.longitude:.6f}), "
+        f"Straight-line Distance={straight_dist_km:.2f} km"
+    )
+
     key = settings.GOOGLE_ROUTES_API_KEY.strip() or settings.GOOGLE_MAPS_API_KEY.strip()
     
-    if key and key != "your_google_maps_api_key_here":
+    if key and key != "your_google_maps_api_key_here" and not key.startswith("your_"):
         url = "https://routes.googleapis.com/directions/v2:computeRoutes"
         headers = {
             "Content-Type": "application/json",
@@ -135,7 +146,7 @@ async def compute_google_routes(
         }
 
         try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
+            async with httpx.AsyncClient(timeout=6.0) as client:
                 resp = await client.post(url, json=payload, headers=headers)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -153,6 +164,16 @@ async def compute_google_routes(
                             dur_secs = float(dur_str) if dur_str else 0.0
                             dur_mins = round(dur_secs / 60.0, 1)
                             
+                            logger.info(
+                                f"[Google Routes] Route {idx+1} result: distance={dist_km} km, "
+                                f"duration={dur_mins} min ({dur_secs}s), straight_dist={straight_dist_km} km"
+                            )
+                            
+                            # Distance Sanity Check: If straight line is physically nearby (< 15km) but Google Routes returns > 90min,
+                            # or if implied speed is absurdly distorted (< 3 km/h over long distance), flag risk level.
+                            is_suspicious = (straight_dist_km < 15.0 and dur_mins > 90.0) or (straight_dist_km < 30.0 and dur_mins > 180.0)
+                            risk_level = "BLOCKED" if is_suspicious else "LOW"
+
                             polyline_str = r.get("polyline", {}).get("encodedPolyline", "")
                             coords = decode_polyline(polyline_str) if polyline_str else []
                             
@@ -177,7 +198,7 @@ async def compute_google_routes(
                                     distance_km=dist_km,
                                     duration_minutes=dur_mins,
                                     geometry=coords,
-                                    risk_level="LOW",
+                                    risk_level=risk_level,
                                     incidents=[],
                                     adjusted_eta_minutes=dur_mins,
                                     steps=steps_list

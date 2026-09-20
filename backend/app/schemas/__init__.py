@@ -310,11 +310,16 @@ class OptimizationResponse(BaseModel):
     emergency_id: str
     selected_ambulance: Optional[AmbulanceRecommendation] = None
     selected_hospital: HospitalRecommendation
+    hospital_candidates: List[HospitalRecommendation] = Field(default_factory=list)
     selected_route: RouteOption
     alternative_routes: List[RouteOption] = Field(default_factory=list)
     ambulance_eta: float = 0.0
     travel_eta: float = 0.0
     total_estimated_time: float = 0.0
+    straight_line_distance_km: Optional[float] = None
+    route_distance_km: Optional[float] = None
+    route_status_flag: Optional[str] = "VERIFIED"
+    route_warning: Optional[str] = None
     optimization_reason: str
     has_live_ambulance: bool = True
     no_ambulance_reason: Optional[str] = None
