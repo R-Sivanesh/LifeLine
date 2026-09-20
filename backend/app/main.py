@@ -6,18 +6,25 @@ from app.database import Base, engine, SessionLocal
 from app.seed.demo_data import seed_database
 from app.api import health, emergencies, ambulances, hospitals, routes, demo, ai, data_status, location
 
+def init_db():
+    try:
+        Base.metadata.create_all(bind=engine)
+        db = SessionLocal()
+        try:
+            seed_database(db, force_reset=False)
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"DB bootstrap notice: {e}")
+
+# Bootstrap database immediately on module load for serverless environments
+init_db()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Print configuration status audit (without exposing secrets)
     settings.print_startup_banner()
-    # Initialize DB tables
-    Base.metadata.create_all(bind=engine)
-    # Seed default demo dataset if empty
-    db = SessionLocal()
-    try:
-        seed_database(db, force_reset=False)
-    finally:
-        db.close()
+    init_db()
     yield
 
 app = FastAPI(

@@ -11,10 +11,11 @@ database_url = settings.DATABASE_URL.strip()
 if not database_url:
     # Use SQLite database
     sqlite_path = settings.SQLITE_DB_PATH.replace("\\", "/")
+    os.makedirs(os.path.dirname(sqlite_path), exist_ok=True)
     database_url = f"sqlite:///{sqlite_path}"
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     if settings.IS_VERCEL:
-        logger.warning("DATABASE: NOT CONFIGURED. Running in ephemeral serverless mode at /tmp/lifeline.db. Set DATABASE_URL in Vercel environment variables for persistence.")
+        logger.info(f"DATABASE: Running in serverless mode at {sqlite_path}.")
 else:
     # Ensure postgresql:// prefix if using postgres:// (e.g. Neon, Supabase, Heroku style)
     if database_url.startswith("postgres://"):
