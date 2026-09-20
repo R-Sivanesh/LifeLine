@@ -302,7 +302,7 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
       }, 500);
     } catch (err) {
       console.error('Optimization failed:', err);
-      alert('Unable to compute emergency response. Retrying with local emergency dispatch...');
+      alert('LifeLine response service is temporarily unavailable.');
       setCurrentStep('READY_FOR_ANALYSIS');
     }
   };

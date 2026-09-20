@@ -51,7 +51,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers
+# Include Routers with /api prefix
 app.include_router(health.router, prefix="/api")
 app.include_router(location.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
@@ -61,6 +61,17 @@ app.include_router(ambulances.router, prefix="/api")
 app.include_router(hospitals.router, prefix="/api")
 app.include_router(routes.router, prefix="/api")
 app.include_router(demo.router, prefix="/api")
+
+# Also include Routers at root for direct serverless function path resolution
+app.include_router(health.router)
+app.include_router(location.router)
+app.include_router(ai.router)
+app.include_router(data_status.router)
+app.include_router(emergencies.router)
+app.include_router(ambulances.router)
+app.include_router(hospitals.router)
+app.include_router(routes.router)
+app.include_router(demo.router)
 
 @app.get("/", summary="Root index")
 def read_root():
