@@ -83,3 +83,6 @@ def read_root():
         "docs": "/api/docs",
         "api_prefix": "/api"
     }
+
+# Expose both app and handler for Vercel Python runtime
+handler = app
