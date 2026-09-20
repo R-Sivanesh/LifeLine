@@ -367,9 +367,9 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto w-full px-3 sm:px-4 py-4 sm:py-6">
+    <div className="max-w-lg mx-auto w-full px-4 py-4 sm:py-6">
       {/* Top Header & Back Button */}
-      <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
+      <div className="flex items-center justify-between mb-5 border-b border-zinc-800 pb-3">
         <button
           onClick={() => {
             if (currentStep === 'COLLECTING_INCIDENT' || currentStep === 'PLAN_READY') {
@@ -382,7 +382,7 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
               setCurrentStep('COLLECTING_LOCATION');
             }
           }}
-          className="flex items-center gap-1 text-xs font-mono text-zinc-400 hover:text-white transition-all py-1 px-2 rounded hover:bg-zinc-900"
+          className="flex items-center gap-1.5 text-sm font-mono text-zinc-400 hover:text-white transition-all py-2 px-3 rounded-lg hover:bg-zinc-900 min-w-[44px] min-h-[44px]"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
@@ -390,13 +390,13 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
 
         <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400">
           <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-          <span className="text-white font-bold">EMERGENCY ASSISTANT</span>
+          <span className="text-white font-bold tracking-wider">EMERGENCY ASSISTANT</span>
         </div>
 
         {onExitFlow && (
           <button
             onClick={onExitFlow}
-            className="text-xs font-mono text-zinc-500 hover:text-zinc-300"
+            className="text-xs font-mono text-zinc-500 hover:text-zinc-300 py-2 px-3 rounded-lg hover:bg-zinc-900 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             Exit
           </button>
@@ -434,18 +434,18 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                     }
                     setCurrentStep('COLLECTING_PATIENT_INFO');
                   }}
-                  className={`p-4 rounded-xl border text-left flex items-center gap-3.5 transition-all shadow-md active:scale-[0.98] ${
+                  className={`p-5 rounded-2xl border text-left flex items-center gap-4 transition-all shadow-md active:scale-[0.97] min-h-[72px] ${
                     isSelected
-                      ? 'bg-red-950/70 border-red-500 text-white shadow-red-600/20'
-                      : 'bg-zinc-900/90 border-zinc-800 hover:border-zinc-700 text-zinc-200 hover:bg-zinc-800/80'
+                      ? 'bg-red-950/70 border-red-500 shadow-red-600/20 card-glow-red'
+                      : 'bg-zinc-900/90 border-zinc-700 hover:border-zinc-600 text-zinc-200 hover:bg-zinc-800/80'
                   }`}
                 >
-                  <div className={`p-2.5 rounded-lg border ${p.color}`}>
-                    <Icon className="h-6 w-6" />
+                  <div className={`p-3 rounded-xl border ${p.color} shrink-0`}>
+                    <Icon className="h-7 w-7" />
                   </div>
                   <div>
-                    <div className="font-bold text-sm text-white">{p.label}</div>
-                    <div className="text-[11px] text-zinc-400">Tap to start emergency triage</div>
+                    <div className="font-bold text-base text-white">{p.label}</div>
+                    <div className="text-xs text-zinc-400 mt-0.5">Tap to start emergency triage</div>
                   </div>
                 </button>
               );
@@ -453,12 +453,10 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
           </div>
 
           {/* Voice & Free-Text Natural Language Input */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3.5 shadow-lg space-y-2">
-            <div className="flex items-center justify-between text-xs font-mono text-zinc-400">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-                <span>Or speak / type naturally (English or Tanglish):</span>
-              </span>
+          <div className="input-glow bg-zinc-900/80 rounded-2xl p-4 shadow-xl space-y-3">
+            <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400">
+              <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+              <span>Or speak / type naturally (English or Tanglish):</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -466,14 +464,14 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                 <button
                   type="button"
                   onClick={toggleVoice}
-                  className={`p-3 rounded-xl border transition-all ${
+                  className={`h-14 w-14 rounded-2xl border-2 shrink-0 flex items-center justify-center transition-all ${
                     isListening
                       ? 'bg-red-600 text-white border-red-400 animate-pulse'
                       : 'bg-zinc-800 text-cyan-400 hover:bg-zinc-700 border-zinc-700'
                   }`}
                   title="Speak emergency details"
                 >
-                  {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  {isListening ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
                 </button>
               )}
 
@@ -482,27 +480,27 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendChatMessage()}
-                placeholder={isListening ? 'Listening...' : 'e.g. "Car crash near Tambaram station, 2 hurt"'}
-                className="flex-1 bg-zinc-950 border border-zinc-700 rounded-xl px-3.5 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                placeholder={isListening ? 'Listening...' : '"Car crash near Tambaram, 2 hurt"'}
+                className="flex-1 bg-zinc-950 border-2 border-zinc-700 rounded-2xl px-4 py-3.5 text-base text-white placeholder-zinc-500 focus:outline-none focus:border-red-500 min-h-[52px]"
               />
 
               <button
                 type="button"
                 onClick={() => handleSendChatMessage()}
                 disabled={!chatInput.trim() || isSendingChat}
-                className="px-4 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm transition-all disabled:opacity-40 border border-red-400"
+                className="h-14 w-14 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold shrink-0 flex items-center justify-center transition-all disabled:opacity-40 border-2 border-red-400"
               >
-                {isSendingChat ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isSendingChat ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
               </button>
             </div>
 
             {/* AI Conversation Transcript if active */}
             {chatMessages.length > 0 && (
-              <div className="space-y-1.5 max-h-36 overflow-y-auto pt-2 border-t border-zinc-800/80 text-xs">
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pt-2 border-t border-zinc-800/80 text-xs">
                 {chatMessages.map((m, i) => (
                   <div
                     key={i}
-                    className={`p-2 rounded-lg leading-relaxed ${
+                    className={`p-2.5 rounded-xl leading-relaxed ${
                       m.role === 'user' ? 'bg-cyan-950/50 text-cyan-200 text-right' : 'bg-zinc-950 text-zinc-300'
                     }`}
                   >
@@ -532,8 +530,8 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
             </p>
           </div>
 
-          {/* Large Unconscious Decision Buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Large Unconscious Decision Buttons — full-width on mobile */}
+          <div className="grid grid-cols-3 gap-2.5">
             <button
               onClick={() => {
                 setIsUnconscious(true);
@@ -541,15 +539,15 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                 setSeverity('CRITICAL');
                 setCurrentStep('COLLECTING_LOCATION');
               }}
-              className={`p-4 rounded-xl border text-center transition-all shadow-md active:scale-[0.98] ${
+              className={`p-4 rounded-2xl border-2 text-center transition-all shadow-md active:scale-[0.97] min-h-[100px] flex flex-col items-center justify-center gap-1 ${
                 isUnconscious === true
-                  ? 'bg-red-950 border-red-500 text-white shadow-red-600/30 ring-2 ring-red-500/50'
-                  : 'bg-zinc-900 border-zinc-800 hover:border-red-500/50 text-zinc-200'
+                  ? 'bg-red-950 border-red-500 card-glow-red'
+                  : 'bg-zinc-900 border-zinc-700 hover:border-red-500/60'
               }`}
             >
-              <div className="text-2xl mb-1">🚨</div>
-              <div className="font-bold text-base text-red-400">YES</div>
-              <div className="text-xs text-zinc-400 mt-0.5">Unconscious / Severe</div>
+              <div className="text-3xl">🚨</div>
+              <div className="font-black text-base text-red-400">YES</div>
+              <div className="text-[11px] text-zinc-400">Unconscious</div>
             </button>
 
             <button
@@ -559,15 +557,15 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                 if (severity === 'CRITICAL') setSeverity('MEDIUM');
                 setCurrentStep('COLLECTING_LOCATION');
               }}
-              className={`p-4 rounded-xl border text-center transition-all shadow-md active:scale-[0.98] ${
+              className={`p-4 rounded-2xl border-2 text-center transition-all shadow-md active:scale-[0.97] min-h-[100px] flex flex-col items-center justify-center gap-1 ${
                 isUnconscious === false
-                  ? 'bg-emerald-950 border-emerald-500 text-white ring-2 ring-emerald-500/50'
-                  : 'bg-zinc-900 border-zinc-800 hover:border-emerald-500/50 text-zinc-200'
+                  ? 'bg-emerald-950 border-emerald-500 card-glow-emerald'
+                  : 'bg-zinc-900 border-zinc-700 hover:border-emerald-500/60'
               }`}
             >
-              <div className="text-2xl mb-1">👍</div>
-              <div className="font-bold text-base text-emerald-400">NO</div>
-              <div className="text-xs text-zinc-400 mt-0.5">Awake & Conscious</div>
+              <div className="text-3xl">👍</div>
+              <div className="font-black text-base text-emerald-400">NO</div>
+              <div className="text-[11px] text-zinc-400">Conscious</div>
             </button>
 
             <button
@@ -575,16 +573,16 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                 setIsUnconscious(null);
                 setCurrentStep('COLLECTING_LOCATION');
               }}
-              className="p-4 rounded-xl border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-center transition-all text-zinc-300"
+              className="p-4 rounded-2xl border-2 border-zinc-700 bg-zinc-900 hover:border-zinc-600 text-center transition-all min-h-[100px] flex flex-col items-center justify-center gap-1"
             >
-              <div className="text-2xl mb-1">❓</div>
-              <div className="font-bold text-base text-zinc-300">NOT SURE</div>
-              <div className="text-xs text-zinc-500 mt-0.5">Checking patient</div>
+              <div className="text-3xl">❓</div>
+              <div className="font-black text-base text-zinc-300">UNSURE</div>
+              <div className="text-[11px] text-zinc-500">Checking</div>
             </button>
           </div>
 
           {/* Patient Count Selector */}
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 space-y-2.5">
+          <div className="bg-zinc-900/80 border border-zinc-700 rounded-2xl p-4 space-y-3">
             <div className="text-xs font-mono text-zinc-400 font-bold uppercase">
               How many people are injured / affected?
             </div>
@@ -594,10 +592,10 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                   key={num}
                   type="button"
                   onClick={() => setPatientCount(num)}
-                  className={`py-2.5 rounded-lg border font-mono font-bold text-sm transition-all ${
+                  className={`py-4 rounded-xl border-2 font-mono font-bold text-sm transition-all min-h-[56px] ${
                     patientCount === num
-                      ? 'bg-cyan-950 border-cyan-500 text-cyan-300 shadow-md'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
+                      ? 'bg-cyan-950 border-cyan-500 text-cyan-300 shadow-md card-glow-cyan'
+                      : 'bg-zinc-950 border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500'
                   }`}
                 >
                   {num === 4 ? '4+ Patients' : `${num} ${num === 1 ? 'Person' : 'People'}`}
@@ -625,20 +623,20 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
             </p>
           </div>
 
-          {/* Primary GPS Button */}
+          {/* Primary GPS Button — extra large for easy phone tap */}
           <button
             onClick={handleUseGpsLocation}
             disabled={isLocating}
-            className="w-full p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:from-cyan-700 active:to-blue-700 text-white font-black text-base tracking-wide flex items-center justify-center gap-3 shadow-xl shadow-cyan-600/30 border border-cyan-400 transition-all active:scale-[0.98]"
+            className="w-full py-6 px-4 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:from-cyan-700 active:to-blue-700 text-white font-black text-lg tracking-wide flex items-center justify-center gap-3 shadow-2xl shadow-cyan-600/40 border-2 border-cyan-400 transition-all active:scale-[0.97]"
           >
             {isLocating ? (
               <>
-                <RefreshCw className="h-6 w-6 animate-spin" />
-                <span>ACQUIRING HIGH-ACCURACY GPS...</span>
+                <RefreshCw className="h-7 w-7 animate-spin" />
+                <span>ACQUIRING GPS...</span>
               </>
             ) : (
               <>
-                <Crosshair className="h-6 w-6 text-white animate-pulse" />
+                <Crosshair className="h-7 w-7 text-white animate-pulse" />
                 <span>USE MY CURRENT LOCATION</span>
               </>
             )}
@@ -661,10 +659,10 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
                 type="text"
                 value={locationSearchQuery}
                 onChange={(e) => handleSearchLocation(e.target.value)}
-                placeholder="e.g. Tambaram Railway Station, Guindy Signal, Chromepet..."
-                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-400"
+                placeholder="Tambaram Station, Guindy Signal..."
+                className="w-full bg-zinc-900 border-2 border-zinc-700 rounded-2xl px-4 py-4 text-base text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500 pr-12 min-h-[56px]"
               />
-              <Search className="h-5 w-5 text-zinc-500 absolute right-3.5 top-3.5" />
+              <Search className="h-5 w-5 text-zinc-500 absolute right-4 top-1/2 -translate-y-1/2" />
             </div>
 
             {locationSearchResults.length > 0 && (
@@ -1198,7 +1196,7 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
           )}
 
           {/* Embedded Tactical Map View */}
-          <div className="h-64 sm:h-80 rounded-2xl overflow-hidden border border-zinc-800 shadow-xl relative">
+          <div className="h-72 sm:h-96 rounded-2xl overflow-hidden border-2 border-zinc-700 shadow-xl relative">
             <TacticalMap
               emergency={createdEmergency}
               currentLocation={currentLocation}
