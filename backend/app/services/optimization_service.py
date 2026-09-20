@@ -12,7 +12,7 @@ from app.schemas import (
     Coordinate
 )
 from app.services.ambulance_service import rank_ambulances
-from app.services.hospital_service import rank_hospitals
+from app.services.hospital_service import rank_hospitals, rank_real_places_hospitals
 from app.services.google_routes_service import compute_google_routes
 from app.services.google_places_service import discover_nearby_hospitals_places
 from app.services.risk_service import analyze_route_risk
@@ -26,50 +26,39 @@ async def run_golden_minute_optimization(
     active_incidents: List[RoadIncident]
 ) -> OptimizationResponse:
     """
-    Evaluates combinations of available ambulances, capable receiving hospitals,
+    Evaluates combinations of available ambulances, real receiving hospitals from Google Places,
     and computed routes to minimize the total estimated response-to-care time.
-
-    Mathematical Formulation (Golden Minute 2.0):
-    ---------------------------------------------
-    Estimated Total Time to Appropriate Care (T_total):
-        T_total = ETA_ambulance(scene) + T_transit(scene -> hospital) + P_hazard
-    
-    Where:
-        ETA_ambulance = f(Distance_haversine(ambulance, emergency), Avg_Speed=35km/h, Buffer=1.5min) [Demo Telemetry]
-        T_transit     = Google_Routes_Live_Duration(route) + Σ(Incident_Delay_Penalties) [Live Traffic]
-        P_hazard      = Spatial risk delay penalty
-        
-    Optimization Objective:
-        minimize(T_total)
-        subject to:
-            Ambulance.capability >= Required_Capability(Emergency.severity)
-            Hospital.trauma_capable == True (if is_trauma_emergency)
-            Route.risk_level != "BLOCKED" (when clear alternative corridor exists)
     """
-    # 1. In-memory ranking of ambulances and hospitals
+    # 1. Rank available ambulances
     ranked_ambs = rank_ambulances(ambulances, emergency)
-    ranked_hosps = rank_hospitals(hospitals, emergency)
-    
     if not ranked_ambs:
-        raise ValueError("No ambulances registered in system.")
-    if not ranked_hosps:
-        raise ValueError("No hospitals registered in system.")
+        raise ValueError("No ambulances available in system.")
         
     top_amb = ranked_ambs[0]
+
+    # 2. Parallel live data retrieval (Google Places Hospitals + Initial Route Probe)
+    places_list, hospital_source, hospital_status, _ = await discover_nearby_hospitals_places(
+        emergency.latitude, emergency.longitude, radius_meters=8000.0
+    )
+
+    if places_list and hospital_status == "LIVE":
+        ranked_hosps = rank_real_places_hospitals(places_list, emergency)
+    else:
+        # Fallback to registered database hospitals (demo/simulation mode)
+        ranked_hosps = rank_hospitals(hospitals, emergency)
+
+    if not ranked_hosps:
+        raise ValueError("No hospital facilities found near the emergency location.")
+
     top_hosp = ranked_hosps[0]
     
+    # 3. Compute live traffic-aware route from Emergency Scene -> Destination Hospital
     origin = Coordinate(latitude=emergency.latitude, longitude=emergency.longitude)
     destination = Coordinate(latitude=top_hosp.latitude, longitude=top_hosp.longitude)
     
-    # 2. Parallel live data retrieval (Routes + Places)
-    routes_task = asyncio.create_task(compute_google_routes(origin, destination, "TRAFFIC_AWARE"))
-    places_task = asyncio.create_task(discover_nearby_hospitals_places(emergency.latitude, emergency.longitude))
+    raw_routes, traffic_source, traffic_status = await compute_google_routes(origin, destination, "TRAFFIC_AWARE")
     
-    (raw_routes, traffic_source, traffic_status), (places_list, hospital_source, hospital_status) = await asyncio.gather(
-        routes_task, places_task
-    )
-    
-    # 3. Analyze spatial risk for all route alternatives
+    # 4. Analyze spatial risk for all route alternatives
     assessed_routes: List[RouteOption] = [
         analyze_route_risk(r, active_incidents) for r in raw_routes
     ]
@@ -89,44 +78,44 @@ async def run_golden_minute_optimization(
     selected_route = assessed_routes[0]
     alternative_routes = assessed_routes[1:] if len(assessed_routes) > 1 else []
     
-    # 4. Total Care Latency calculation
+    # 5. Total Care Latency calculation
     ambulance_eta = top_amb.eta_minutes
     travel_eta = selected_route.adjusted_eta_minutes
     total_time = round(ambulance_eta + travel_eta, 1)
     
-    # 5. Data Provenance & Confidence Calculation
+    # 6. Data Provenance & Confidence Calculation
     known_factors = [
-        f"Route travel time: {travel_eta:.0f}m via {traffic_source} ({traffic_status})",
-        f"Ambulance ETA: {ambulance_eta:.0f}m from Demo Telemetry (A-102 ALS)",
-        f"Destination: {top_hosp.name} ({hospital_source})"
+        f"Hospital Destination: {top_hosp.name} ({hospital_source} • {hospital_status})",
+        f"Route travel time: ~{travel_eta:.0f}m via {traffic_source} ({traffic_status})",
+        f"Ambulance ETA: ~{ambulance_eta:.0f}m from Demo Telemetry ({top_amb.vehicle_number} {top_amb.capability})"
     ]
     unknown_factors = [
-        "Live ICU bed availability (Not provided by public APIs)",
-        "Real-time ER triage intake queue length"
+        "Live hospital bed/ICU occupancy (UNKNOWN • Not provided by public municipal APIs)",
+        "Real-time emergency department triage wait queue"
     ]
     
-    confidence_level = "HIGH" if traffic_status == "LIVE" else "MEDIUM"
-    confidence_score = 0.92 if traffic_status == "LIVE" else 0.75
+    confidence_level = "HIGH" if (traffic_status == "LIVE" and hospital_status == "LIVE") else "MEDIUM"
+    confidence_score = 0.94 if confidence_level == "HIGH" else 0.75
     
     conf_obj = DecisionConfidenceBreakdown(
         level=confidence_level,
         score=confidence_score,
         known_factors=known_factors,
         unknown_factors=unknown_factors,
-        rationale=f"Confidence is {confidence_level} based on {traffic_source} and verified hospital placement."
+        rationale=f"Confidence is {confidence_level} based on {hospital_source} verified location and {traffic_source} traffic data."
     )
     
     opt_reason = (
-        f"Optimized path: {top_amb.vehicle_number} ({top_amb.capability}, {ambulance_eta:.0f}m ETA) "
-        f"→ {top_hosp.name} via {selected_route.name} ({travel_eta:.0f}m transit, {selected_route.risk_level} risk). "
-        f"Estimated time to appropriate care: {total_time:.0f} min."
+        f"Optimal care corridor: {top_amb.vehicle_number} ({top_amb.capability}, {ambulance_eta:.0f}m scene ETA) "
+        f"→ {top_hosp.name} ({hospital_status} via {hospital_source}) via {selected_route.name} ({travel_eta:.0f}m transit). "
+        f"Estimated time to critical care: {total_time:.0f} min."
     )
     
     data_sources_map = {
         "traffic": traffic_source,
         "hospitals": hospital_source,
         "ambulances": "Demo Telemetry (Simulated Fleet)",
-        "hospital_capacity": "Public API Unavailable (Simulated)"
+        "hospital_capacity": "UNKNOWN (Not provided by public municipal APIs)"
     }
     
     return OptimizationResponse(
@@ -162,10 +151,11 @@ def generate_decision_explanation(
     )
     
     # Hospital explanation
+    hosp_source = hospital.source or "GOOGLE_PLACES"
     hosp_reason = (
-        f"{hospital.name} was selected with a {hospital.match_score:.0f}% readiness score. "
-        f"Location and facility are verified. Bed capacity ({hospital.available_beds} open beds) "
-        f"is simulated as real-time hospital occupancy is not provided by public APIs."
+        f"{hospital.name} was selected as the nearest verified facility (~{hospital.distance_km or 0:.1f} km away). "
+        f"Location verified via {hosp_source}. Clinical capacity (bed and ICU availability) is UNKNOWN as real-time occupancy "
+        f"is not published by public municipal APIs."
     )
     
     # Route explanation
@@ -187,9 +177,8 @@ def generate_decision_explanation(
         
     total_time = round(ambulance.eta_minutes + route.adjusted_eta_minutes, 1)
     overall_reason = (
-        f"This prototype optimization coordinates capability-matched ambulance dispatch, "
-        f"verified trauma facility placement, and traffic-aware routing to achieve an estimated "
-        f"response-to-care time of ~{total_time:.0f} minutes."
+        f"LifeLine coordinates capability-matched ambulance dispatch, real Google Places hospital location, "
+        f"and live traffic routing to achieve an estimated response-to-care time of ~{total_time:.0f} minutes."
     )
     
     return DecisionExplanationResponse(

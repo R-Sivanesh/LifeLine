@@ -133,9 +133,9 @@ export const lifelineApi = {
   },
 
   // Live Google Places & Routes
-  getNearbyHospitals: async (latitude: number, longitude: number, radius: number = 8000) => {
+  getNearbyHospitals: async (lat: number, lng: number, radius: number = 8000) => {
     const res = await api.get('/hospitals/nearby', {
-      params: { latitude, longitude, radius }
+      params: { lat, lng, radius }
     });
     return res.data;
   },

@@ -45,6 +45,33 @@ export interface Ambulance {
   eta_minutes: number;
 }
 
+export interface NearbyHospitalItem {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  address?: string;
+  business_status?: string;
+  distance_meters?: number;
+  distance_km?: number;
+  place_id?: string;
+  phone?: string;
+  rating?: number;
+  source: 'GOOGLE_PLACES' | 'DEMO_TELEMETRY' | string;
+  status: 'LIVE' | 'DEMO' | 'UNKNOWN' | 'DEGRADED' | 'MISSING' | string;
+  capacity_status?: string;
+  trauma_capable?: boolean | null;
+  icu_available?: boolean | null;
+  available_beds?: number | null;
+}
+
+export interface NearbyHospitalsResponse {
+  source: string;
+  status: 'LIVE' | 'DEMO' | 'UNKNOWN' | 'DEGRADED' | 'MISSING' | string;
+  hospitals: NearbyHospitalItem[];
+  error?: string | null;
+}
+
 export interface HospitalRecommendation {
   hospital_id: string;
   name: string;
@@ -53,12 +80,16 @@ export interface HospitalRecommendation {
   reasons: string[];
   latitude: number;
   longitude: number;
-  trauma_capable: boolean;
-  icu_available: boolean;
-  available_beds: number;
+  trauma_capable?: boolean | null;
+  icu_available?: boolean | null;
+  available_beds?: number | null;
   address?: string;
   phone?: string;
+  distance_km?: number;
+  place_id?: string;
+  source?: string;
   verification_status?: string;
+  capacity_status?: string;
 }
 
 export interface Hospital {

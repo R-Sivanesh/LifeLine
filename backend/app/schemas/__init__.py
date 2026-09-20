@@ -104,6 +104,31 @@ class HospitalResponse(BaseModel):
     specialities: List[str] = Field(default_factory=list)
     status: str
 
+class NearbyHospitalItem(BaseModel):
+    id: str
+    name: str
+    latitude: float
+    longitude: float
+    address: Optional[str] = ""
+    business_status: Optional[str] = "OPERATIONAL"
+    distance_meters: Optional[float] = None
+    distance_km: Optional[float] = None
+    place_id: Optional[str] = None
+    phone: Optional[str] = None
+    rating: Optional[float] = None
+    source: str = "GOOGLE_PLACES"
+    status: str = "LIVE"
+    capacity_status: str = "UNKNOWN"
+    trauma_capable: Optional[bool] = None
+    icu_available: Optional[bool] = None
+    available_beds: Optional[int] = None
+
+class NearbyHospitalsResponse(BaseModel):
+    source: str = "GOOGLE_PLACES"
+    status: str = "LIVE"  # LIVE, DEMO, UNKNOWN, DEGRADED, MISSING
+    hospitals: List[NearbyHospitalItem] = Field(default_factory=list)
+    error: Optional[str] = None
+
 class HospitalRecommendation(BaseModel):
     hospital_id: str
     name: str
@@ -112,9 +137,16 @@ class HospitalRecommendation(BaseModel):
     reasons: List[str]
     latitude: float
     longitude: float
-    trauma_capable: bool
-    icu_available: bool
-    available_beds: int
+    trauma_capable: Optional[bool] = None
+    icu_available: Optional[bool] = None
+    available_beds: Optional[int] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    distance_km: Optional[float] = None
+    place_id: Optional[str] = None
+    source: Optional[str] = "GOOGLE_PLACES"
+    verification_status: Optional[str] = "PUBLICLY_VERIFIED"
+    capacity_status: Optional[str] = "UNKNOWN"
 
 # ==================== ROUTING SCHEMAS ====================
 class Coordinate(BaseModel):

@@ -8,7 +8,8 @@ import {
   RoadIncident,
   Ambulance,
   Hospital,
-  LocationSearchResult
+  LocationSearchResult,
+  NearbyHospitalItem
 } from '../types';
 import { lifelineApi } from '../services/api';
 import {
@@ -80,7 +81,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
 
   const [providerMode, setProviderMode] = useState<'google' | 'mapbox' | 'canvas'>('canvas');
   const [mapError, setMapError] = useState<string | null>(null);
-  const [showConfigHelp, setShowConfigHelp] = useState<boolean>(false);
+
+  // Real Google Places Hospitals Discovery State
+  const [liveHospitals, setLiveHospitals] = useState<NearbyHospitalItem[]>([]);
+  const [hospitalsLoading, setHospitalsLoading] = useState<boolean>(false);
+  const [hospitalsSource, setHospitalsSource] = useState<string>('GOOGLE_PLACES');
 
   // Location Acquisition UI states
   const [isAcquiringGps, setIsAcquiringGps] = useState(false);
@@ -88,7 +93,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<LocationSearchResult[]>([]);
   const [isDropPinMode, setIsDropPinMode] = useState(false);
-  const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
 
   // Instances
   const googleMapRef = useRef<any>(null);
@@ -96,7 +100,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const googlePolylinesRef = useRef<any[]>([]);
 
   const mapboxMapRef = useRef<mapboxgl.Map | null>(null);
-  const mapboxMarkersRef = useRef<mapboxgl.Marker[]>([]);
 
   const googleApiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
   const mapboxToken = (import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '').trim();
@@ -137,8 +140,162 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   // Center coordinates calculation
   const activeLat = emergency?.latitude || currentLocation?.latitude || 13.0380;
   const activeLon = emergency?.longitude || currentLocation?.longitude || 80.2300;
+  const hasConfirmedLocation = Boolean(currentLocation || emergency);
 
-  // 2. Location Search Handler
+  // 2. Query Real Nearby Hospitals from Google Places when confirmed location is available
+  useEffect(() => {
+    const lat = emergency?.latitude || currentLocation?.latitude;
+    const lng = emergency?.longitude || currentLocation?.longitude;
+
+    if (lat && lng && (lat !== 0 || lng !== 0)) {
+      setHospitalsLoading(true);
+      lifelineApi.getNearbyHospitals(lat, lng, 8000)
+        .then((res: any) => {
+          if (res?.hospitals) {
+            setLiveHospitals(res.hospitals);
+            setHospitalsSource(res.source || 'GOOGLE_PLACES');
+          }
+        })
+        .catch((err: any) => {
+          console.warn('Google Places discovery error:', err);
+        })
+        .finally(() => setHospitalsLoading(false));
+    } else {
+      setLiveHospitals([]);
+    }
+  }, [emergency?.latitude, emergency?.longitude, currentLocation?.latitude, currentLocation?.longitude]);
+
+  // 3. Initialize / Update Google Maps
+  useEffect(() => {
+    if (providerMode !== 'google' || !mapContainerRef.current) return;
+    const g = (window as any).google;
+    if (!g || !g.maps) return;
+
+    if (!googleMapRef.current) {
+      const map = new g.maps.Map(mapContainerRef.current, {
+        center: { lat: activeLat, lng: activeLon },
+        zoom: 13,
+        styles: DARK_GOOGLE_MAP_STYLE,
+        disableDefaultUI: false,
+        zoomControl: true,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false
+      });
+
+      map.addListener('click', (e: any) => {
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+        handleMapCoordinateClick(lat, lng);
+      });
+
+      googleMapRef.current = map;
+    } else {
+      googleMapRef.current.setCenter({ lat: activeLat, lng: activeLon });
+    }
+
+    const map = googleMapRef.current;
+
+    // Clear old markers & polylines
+    googleMarkersRef.current.forEach((m) => m.setMap(null));
+    googleMarkersRef.current = [];
+    googlePolylinesRef.current.forEach((p) => p.setMap(null));
+    googlePolylinesRef.current = [];
+
+    // Add Scene Marker
+    if (hasConfirmedLocation) {
+      const sceneMarker = new g.maps.Marker({
+        position: { lat: activeLat, lng: activeLon },
+        map,
+        title: emergency ? `🚨 EMERGENCY: ${emergency.incident_type}` : `📍 Your Location`,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 9,
+          fillColor: '#ef4444',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2
+        }
+      });
+      googleMarkersRef.current.push(sceneMarker);
+    }
+
+    // Add Real Google Places Hospital Markers
+    const displayHospitals = selectedHospital
+      ? [selectedHospital]
+      : (liveHospitals.length > 0 ? liveHospitals : allHospitals.slice(0, 5));
+
+    displayHospitals.forEach((hosp: any) => {
+      const isSelected = selectedHospital && (selectedHospital.hospital_id === hosp.id || selectedHospital.name === hosp.name);
+      const isLive = hosp.source === 'GOOGLE_PLACES' || hosp.source?.includes('Google Places');
+      
+      const hospMarker = new g.maps.Marker({
+        position: { lat: hosp.latitude, lng: hosp.longitude },
+        map,
+        title: `🏥 ${hosp.name}`,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: isSelected ? 10 : 7,
+          fillColor: '#10b981',
+          fillOpacity: 1,
+          strokeColor: isSelected ? '#ffffff' : '#a7f3d0',
+          strokeWeight: isSelected ? 3 : 1.5
+        }
+      });
+
+      const infoWindow = new g.maps.InfoWindow({
+        content: `
+          <div style="color: #18181b; font-family: monospace; font-size: 11px; padding: 4px;">
+            <strong style="color: #047857; font-size: 12px;">🏥 ${hosp.name}</strong><br/>
+            <span>${hosp.address || ''}</span><br/>
+            <span style="display:inline-block; margin-top:3px; background:#ecfdf5; color:#065f46; padding:1px 4px; border-radius:3px; font-weight:bold; font-size:10px;">
+              ${isLive ? 'LIVE • Google Places (New)' : 'DEMO HOSPITAL'}
+            </span>
+          </div>
+        `
+      });
+
+      hospMarker.addListener('click', () => {
+        infoWindow.open(map, hospMarker);
+      });
+
+      googleMarkersRef.current.push(hospMarker);
+    });
+
+    // Add Ambulance Marker
+    if (selectedAmbulance) {
+      const ambMarker = new g.maps.Marker({
+        position: { lat: selectedAmbulance.latitude, lng: selectedAmbulance.longitude },
+        map,
+        title: `🚑 ${selectedAmbulance.vehicle_number} (${selectedAmbulance.capability})`,
+        icon: {
+          path: g.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: '#06b6d4',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2
+        }
+      });
+      googleMarkersRef.current.push(ambMarker);
+    }
+
+    // Add Route Polyline
+    if (selectedRoute && selectedRoute.geometry && selectedRoute.geometry.length > 1) {
+      const pathCoords = selectedRoute.geometry.map(([lon, lat]: [number, number]) => ({ lat, lng: lon }));
+      const polyline = new g.maps.Polyline({
+        path: pathCoords,
+        geodesic: true,
+        strokeColor: selectedRoute.risk_level === 'BLOCKED' ? '#ef4444' : '#06b6d4',
+        strokeOpacity: 0.9,
+        strokeWeight: 4,
+        map
+      });
+      googlePolylinesRef.current.push(polyline);
+    }
+  }, [providerMode, emergency, currentLocation, selectedAmbulance, selectedHospital, selectedRoute, liveHospitals, allHospitals, activeLat, activeLon, hasConfirmedLocation]);
+
+  // 4. Location Search Handler
   const handleLocationSearch = async (q: string) => {
     setSearchQuery(q);
     if (q.trim().length < 2) {
@@ -164,7 +321,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     setSearchQuery('');
   };
 
-  // 3. Browser GPS Acquisition Handler
+  // 5. Browser GPS Acquisition Handler
   const handleUseMyLocation = () => {
     if (!navigator.geolocation) {
       alert('Geolocation is not supported by your browser.');
@@ -201,30 +358,23 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       },
       (err) => {
         console.warn('Geolocation error:', err);
-        alert(`Location access denied or unavailable: ${err.message}`);
+        alert(`Location access denied: ${err.message}`);
         setIsAcquiringGps(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
   };
 
-  // 4. Pin Drop Handler
+  // 6. Pin Drop / Map Click Handler
   const handleMapCoordinateClick = async (lat: number, lon: number) => {
-    if (onMapClick) {
-      onMapClick(lat, lon);
-    }
+    if (onMapClick) onMapClick(lat, lon);
     if (isDropPinMode || onLocationAcquired) {
-      setIsReverseGeocoding(true);
       let address = `Pin Location (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
       try {
         const rev = await lifelineApi.reverseGeocode(lat, lon);
-        if (rev?.formatted_address) {
-          address = rev.formatted_address;
-        }
+        if (rev?.formatted_address) address = rev.formatted_address;
       } catch (e) {
         console.warn('Reverse geocode error:', e);
-      } finally {
-        setIsReverseGeocoding(false);
       }
 
       if (onLocationAcquired) {
@@ -240,28 +390,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     }
   };
 
-  // 5. Canvas Click Handler
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const width = canvas.width;
-    const height = canvas.height;
-    const scale = Math.min(width, height) * 12.0;
-
-    const centerLat = activeLat;
-    const centerLon = activeLon;
-
-    const clickedLon = centerLon + (x - width / 2) / scale;
-    const clickedLat = centerLat - (y - height / 2) / scale;
-
-    handleMapCoordinateClick(clickedLat, clickedLon);
-  };
-
-  // 6. Tactical Vector Canvas Renderer (Deterministic fallback)
+  // 7. Tactical Vector Canvas Renderer (Deterministic fallback)
   const renderFallbackCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || providerMode !== 'canvas') return;
@@ -271,7 +400,6 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const width = (canvas.width = canvas.parentElement?.clientWidth || 700);
     const height = (canvas.height = canvas.parentElement?.clientHeight || 520);
 
-    // Dark background
     ctx.fillStyle = '#09090b';
     ctx.fillRect(0, 0, width, height);
 
@@ -299,72 +427,31 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     const toCanvasX = (lon: number) => width / 2 + (lon - centerLon) * scale;
     const toCanvasY = (lat: number) => height / 2 - (lat - centerLat) * scale;
 
-    // Alternative routes
-    if (emergency) {
-      alternativeRoutes.forEach((alt) => {
-        if (alt.geometry && alt.geometry.length > 1) {
-          ctx.beginPath();
-          ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = '#64748b';
-          ctx.lineWidth = 2.5;
-          alt.geometry.forEach(([lon, lat], i) => {
-            const cx = toCanvasX(lon);
-            const cy = toCanvasY(lat);
-            if (i === 0) ctx.moveTo(cx, cy);
-            else ctx.lineTo(cx, cy);
-          });
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      });
+    // Real Google Places Hospitals
+    const displayHospitals = selectedHospital
+      ? [selectedHospital]
+      : (liveHospitals.length > 0 ? liveHospitals : allHospitals.slice(0, 5));
 
-      // Primary route
-      if (selectedRoute && selectedRoute.geometry && selectedRoute.geometry.length > 1) {
-        const isBlocked = selectedRoute.risk_level === 'BLOCKED';
-        ctx.beginPath();
-        ctx.strokeStyle = isBlocked ? 'rgba(239, 68, 68, 0.3)' : 'rgba(6, 182, 212, 0.3)';
-        ctx.lineWidth = 8;
-        selectedRoute.geometry.forEach(([lon, lat], i) => {
-          const cx = toCanvasX(lon);
-          const cy = toCanvasY(lat);
-          if (i === 0) ctx.moveTo(cx, cy);
-          else ctx.lineTo(cx, cy);
-        });
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.strokeStyle = isBlocked ? '#ef4444' : '#22d3ee';
-        ctx.lineWidth = 3.5;
-        selectedRoute.geometry.forEach(([lon, lat], i) => {
-          const cx = toCanvasX(lon);
-          const cy = toCanvasY(lat);
-          if (i === 0) ctx.moveTo(cx, cy);
-          else ctx.lineTo(cx, cy);
-        });
-        ctx.stroke();
-      }
-    }
-
-    // Hospitals
-    const displayHospitals = selectedHospital ? [selectedHospital] : allHospitals.slice(0, 5);
-    displayHospitals.forEach((hosp) => {
+    displayHospitals.forEach((hosp: any) => {
       const hx = toCanvasX(hosp.longitude);
       const hy = toCanvasY(hosp.latitude);
+      const isSelected = selectedHospital && (selectedHospital.hospital_id === hosp.id || selectedHospital.name === hosp.name);
+      
       ctx.fillStyle = '#10b981';
       ctx.beginPath();
-      ctx.arc(hx, hy, 8, 0, Math.PI * 2);
+      ctx.arc(hx, hy, isSelected ? 9 : 6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#ecfdf5';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = isSelected ? '#ffffff' : '#a7f3d0';
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
       ctx.stroke();
 
       ctx.fillStyle = '#10b981';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText(`🏥 ${hosp.name.slice(0, 16)}`, hx + 10, hy + 3);
+      ctx.font = isSelected ? 'bold 11px monospace' : '10px monospace';
+      ctx.fillText(`🏥 ${hosp.name.slice(0, 18)}`, hx + 10, hy + 3);
     });
 
     // Ambulances
-    const displayAmbulances = selectedAmbulance ? [selectedAmbulance] : allAmbulances.slice(0, 4);
+    const displayAmbulances = selectedAmbulance ? [selectedAmbulance] : allAmbulances.slice(0, 3);
     displayAmbulances.forEach((amb) => {
       const ax = toCanvasX(amb.longitude);
       const ay = toCanvasY(amb.latitude);
@@ -373,7 +460,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       ctx.arc(ax, ay, 7, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#e0f2fe';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
       ctx.fillStyle = '#06b6d4';
@@ -381,51 +468,30 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       ctx.fillText(`🚑 ${amb.vehicle_number}`, ax + 10, ay + 3);
     });
 
-    // Active Emergency Scene
-    if (emergency) {
-      const ex = toCanvasX(emergency.longitude);
-      const ey = toCanvasY(emergency.latitude);
+    // Emergency Scene / Location Pin
+    if (hasConfirmedLocation) {
+      const ex = toCanvasX(activeLon);
+      const ey = toCanvasY(activeLat);
+
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = emergency ? 'rgba(239, 68, 68, 0.5)' : 'rgba(6, 182, 212, 0.5)';
+      ctx.lineWidth = 2.5;
       ctx.arc(ex, ey, 14, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.fillStyle = '#ef4444';
+      ctx.fillStyle = emergency ? '#ef4444' : '#06b6d4';
       ctx.beginPath();
-      ctx.arc(ex, ey, 9, 0, Math.PI * 2);
+      ctx.arc(ex, ey, 8, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.fillStyle = '#ef4444';
+      ctx.fillStyle = emergency ? '#ef4444' : '#38bdf8';
       ctx.font = 'bold 11px monospace';
-      ctx.fillText(`🚨 SCENE: ${emergency.incident_type || 'INCIDENT'}`, ex + 14, ey + 4);
-    } else if (currentLocation) {
-      // User Confirmed Location Pin (before emergency optimization)
-      const px = toCanvasX(currentLocation.longitude);
-      const py = toCanvasY(currentLocation.latitude);
-
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(6, 182, 212, 0.5)';
-      ctx.lineWidth = 2;
-      ctx.arc(px, py, 12, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = '#06b6d4';
-      ctx.beginPath();
-      ctx.arc(px, py, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText(`📍 ${currentLocation.formatted_address.slice(0, 24)}`, px + 12, py + 4);
+      ctx.fillText(emergency ? `🚨 SCENE: ${emergency.incident_type}` : `📍 Your Location`, ex + 14, ey + 4);
     }
-  }, [emergency, currentLocation, selectedAmbulance, selectedHospital, selectedRoute, alternativeRoutes, allAmbulances, allHospitals, providerMode, activeLat, activeLon]);
+  }, [emergency, currentLocation, selectedAmbulance, selectedHospital, selectedRoute, liveHospitals, allAmbulances, allHospitals, providerMode, activeLat, activeLon, hasConfirmedLocation]);
 
   useEffect(() => {
     if (providerMode === 'canvas') {
@@ -436,13 +502,10 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
     }
   }, [providerMode, renderFallbackCanvas]);
 
-  const hasConfirmedLocation = Boolean(currentLocation || emergency);
-
   return (
     <div className={`relative rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 ${className}`}>
       {/* Location Acquisition Header Toolbar */}
       <div className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        {/* Left Action Buttons */}
         <div className="flex items-center gap-1.5 pointer-events-auto bg-zinc-950/90 backdrop-blur-md p-1.5 rounded-lg border border-zinc-800 shadow-2xl">
           <button
             onClick={handleUseMyLocation}
@@ -453,11 +516,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
                 : 'bg-zinc-900 hover:bg-zinc-800 text-cyan-400 border border-zinc-700'
             }`}
           >
-            {isAcquiringGps ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Crosshair className="h-3.5 w-3.5" />
-            )}
+            {isAcquiringGps ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Crosshair className="h-3.5 w-3.5" />}
             <span>[ USE MY LOCATION ]</span>
           </button>
 
@@ -491,7 +550,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
           {hasConfirmedLocation ? (
             <div className="flex items-center gap-1.5 text-emerald-400">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="font-bold truncate max-w-[220px]">
+              <span className="font-bold truncate max-w-[200px]">
                 {currentLocation?.formatted_address || emergency?.description || 'Location Confirmed'}
               </span>
               <span className="text-[10px] text-zinc-400 bg-zinc-900 px-1.5 py-0.2 rounded border border-zinc-800">
@@ -503,25 +562,19 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
             <div className="flex items-center gap-1.5 text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5 animate-pulse" />
               <span className="font-bold">LOCATION NOT SET</span>
-              <span className="text-[10px] text-zinc-500 hidden sm:inline">(STANDBY)</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Interactive Location Search Autocomplete Popup */}
+      {/* Location Search Autocomplete Popup */}
       {isSearchingLocation && (
         <div className="absolute top-16 left-3 z-30 w-80 bg-zinc-950/95 backdrop-blur-md border border-cyan-500/40 rounded-xl p-3 shadow-2xl font-mono text-xs animate-fadeIn">
           <div className="flex items-center justify-between mb-2">
             <span className="text-cyan-400 font-bold flex items-center gap-1.5">
-              <Search className="h-3.5 w-3.5" /> Search Chennai Landmark
+              <Search className="h-3.5 w-3.5" /> Search Location
             </span>
-            <button
-              onClick={() => setIsSearchingLocation(false)}
-              className="text-zinc-500 hover:text-white"
-            >
-              ✕
-            </button>
+            <button onClick={() => setIsSearchingLocation(false)} className="text-zinc-500 hover:text-white">✕</button>
           </div>
           <input
             type="text"
@@ -542,64 +595,71 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
                 <span className="text-[10px] text-zinc-500 truncate">{res.formatted_address}</span>
               </button>
             ))}
-            {searchResults.length === 0 && searchQuery.length >= 2 && (
-              <div className="p-2 text-zinc-500 text-center text-[11px]">
-                No places found. Try another landmark name.
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {/* Mapbox Container */}
+      {/* Google Maps / Mapbox Container */}
       <div
         ref={mapContainerRef}
-        className={`w-full h-full ${providerMode !== 'mapbox' ? 'hidden' : ''}`}
+        className={`w-full h-full ${providerMode === 'canvas' ? 'hidden' : ''}`}
       />
 
       {/* Tactical Canvas Container (Degraded Offline Mode) */}
       {providerMode === 'canvas' && (
         <canvas
           ref={canvasRef}
-          onClick={handleCanvasClick}
+          onClick={(e) => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const width = canvas.width;
+            const height = canvas.height;
+            const scale = Math.min(width, height) * 12.0;
+            const clickedLon = activeLon + (x - width / 2) / scale;
+            const clickedLat = activeLat - (y - height / 2) / scale;
+            handleMapCoordinateClick(clickedLat, clickedLon);
+          }}
           className={`w-full h-full block ${isDropPinMode ? 'cursor-crosshair' : 'cursor-default'}`}
         />
       )}
 
-      {/* Engine Status Badge (Bottom Left) */}
+      {/* Live Data Provenance Badge (Bottom Left) */}
       <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 bg-zinc-950/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-zinc-800 text-[10px] text-zinc-400 font-mono shadow-xl">
-        <div className={`h-2 w-2 rounded-full ${providerMode === 'canvas' ? 'bg-cyan-400' : 'bg-emerald-400'} animate-pulse`} />
+        <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
         <span>
           {providerMode === 'google'
             ? 'GOOGLE MAPS PLATFORM • LIVE'
             : providerMode === 'mapbox'
             ? 'MAPBOX GL • LIVE'
-            : 'TACTICAL VECTOR RADAR GRID (OFFLINE)'}
+            : 'TACTICAL RADAR CANVAS'}
+        </span>
+        <span className="text-zinc-600">|</span>
+        <span className="text-emerald-400">
+          {liveHospitals.length > 0
+            ? `HOSPITALS: LIVE (${liveHospitals.length} Places)`
+            : 'HOSPITALS: Awaiting Location'}
         </span>
       </div>
 
       {/* Map Legend */}
       <div className="absolute bottom-3 right-3 z-10 flex items-center gap-3 bg-zinc-950/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-zinc-800 text-[10px] text-zinc-300 font-mono shadow-lg">
-        {emergency && (
+        {hasConfirmedLocation && (
           <div className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>
-            <span>Emergency</span>
+            <span>Scene</span>
           </div>
         )}
+        <div className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
+          <span>Hospital (Google Places)</span>
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-cyan-400"></span>
           <span>Ambulance</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
-          <span>Hospital</span>
-        </div>
-        {incidents.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-            <span>Hazard</span>
-          </div>
-        )}
       </div>
     </div>
   );
