@@ -18,8 +18,27 @@ for p in (str(current_dir), str(backend_dir), str(root_dir)):
     if os.path.exists(p) and p not in sys.path:
         sys.path.insert(0, p)
 
-# Import real FastAPI application
-from app.main import app as fastapi_app
+_fastapi_app = None
+_load_error = None
+
+def get_app():
+    global _fastapi_app, _load_error
+    if _fastapi_app is not None:
+        return _fastapi_app
+    if _load_error is not None:
+        return None
+    try:
+        from app.main import app
+        _fastapi_app = app
+        return _fastapi_app
+    except Exception as e:
+        _load_error = {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "cwd": os.getcwd(),
+            "sys_path": sys.path
+        }
+        return None
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -48,6 +67,18 @@ class handler(BaseHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         path = parsed_url.path
         query_string = parsed_url.query.encode('latin-1')
+
+        app_instance = get_app()
+        if app_instance is None:
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "initialization_failed",
+                "details": _load_error
+            }, indent=2).encode('utf-8'))
+            return
         
         headers = []
         for key, value in self.headers.items():
@@ -87,7 +118,7 @@ class handler(BaseHTTPRequestHandler):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(fastapi_app(scope, receive, send))
+            loop.run_until_complete(app_instance(scope, receive, send))
         except Exception as exc:
             err_msg = json.dumps({
                 "error": "FastAPI Execution Failure",
