@@ -2,7 +2,8 @@ import os
 import tempfile
 from pathlib import Path
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
 # Load root .env or local .env
@@ -13,6 +14,8 @@ else:
     load_dotenv()
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+
     PROJECT_NAME: str = "LifeLine"
     PROJECT_VERSION: str = "2.0.0"
     API_PREFIX: str = "/api"
@@ -33,11 +36,35 @@ class Settings(BaseSettings):
     # Database & Environment
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
-    DEMO_MODE: bool = os.getenv("DEMO_MODE", "true").lower() in ("true", "1", "t")
-    IS_VERCEL: bool = bool(os.getenv("VERCEL") in ("1", "true", "True") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
+    DEMO_MODE: bool = True
+    IS_VERCEL: bool = False
     
     # SQLite fallback location if DATABASE_URL is empty (safely defaults to /tmp if in serverless or read-only root)
     SQLITE_DB_PATH: str = os.path.join(tempfile.gettempdir(), "lifeline.db")
+
+    @field_validator("DEMO_MODE", mode="before")
+    @classmethod
+    def parse_demo_mode(cls, v: Any) -> bool:
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            clean = v.strip().lower()
+            if not clean:
+                return True
+            return clean in ("true", "1", "t", "yes")
+        return bool(v)
+
+    @field_validator("IS_VERCEL", mode="before")
+    @classmethod
+    def parse_is_vercel(cls, v: Any) -> bool:
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            clean = v.strip().lower()
+            if not clean:
+                return bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
+            return clean in ("true", "1", "t", "yes")
+        return bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
 
     def get_allowed_origins(self) -> List[str]:
         origins = [
