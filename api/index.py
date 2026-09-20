@@ -64,79 +64,93 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _handle_request(self, method: str):
-        parsed_url = urlparse(self.path)
-        path = parsed_url.path
-        query_string = parsed_url.query.encode('latin-1')
+        try:
+            parsed_url = urlparse(self.path)
+            path = parsed_url.path
+            query_string = parsed_url.query.encode('latin-1')
 
-        app_instance = get_app()
-        if app_instance is None:
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
+            app_instance = get_app()
+            if app_instance is None:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "initialization_failed",
+                    "details": _load_error
+                }, indent=2).encode('utf-8'))
+                return
+            
+            headers = []
+            for key, value in self.headers.items():
+                headers.append((key.lower().encode('latin-1'), str(value).encode('latin-1')))
+                
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length) if content_length > 0 else b''
+            
+            response_status = 200
+            response_headers = []
+            response_body = []
+            
+            scope = {
+                'type': 'http',
+                'asgi': {'version': '3.0'},
+                'http_version': '1.1',
+                'method': method,
+                'path': path,
+                'raw_path': path.encode('latin-1'),
+                'query_string': query_string,
+                'headers': headers,
+                'server': ('localhost', 80),
+            }
+            
+            async def receive():
+                return {'type': 'http.request', 'body': body, 'more_body': False}
+                
+            async def send(message):
+                nonlocal response_status, response_headers, response_body
+                if message['type'] == 'http.response.start':
+                    response_status = int(message.get('status', 200))
+                    for h_name, h_val in message.get('headers', []):
+                        response_headers.append((h_name.decode('latin-1'), h_val.decode('latin-1')))
+                elif message['type'] == 'http.response.body':
+                    response_body.append(message.get('body', b''))
+                    
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(app_instance(scope, receive, send))
+            except Exception as exc:
+                err_msg = json.dumps({
+                    "error": "FastAPI Execution Failure",
+                    "details": str(exc),
+                    "traceback": traceback.format_exc(),
+                    "path": path
+                })
+                response_status = 500
+                response_headers = [('content-type', 'application/json')]
+                response_body = [err_msg.encode('utf-8')]
+            finally:
+                loop.close()
+                
+            self.send_response(response_status)
+            for h_name, h_val in response_headers:
+                if h_name.lower() not in ('server', 'date'):
+                    self.send_header(h_name, h_val)
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps({
-                "status": "initialization_failed",
-                "details": _load_error
-            }, indent=2).encode('utf-8'))
-            return
-        
-        headers = []
-        for key, value in self.headers.items():
-            headers.append((key.lower().encode('latin-1'), value.encode('latin-1')))
-            
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length) if content_length > 0 else b''
-        
-        response_status = 200
-        response_headers = []
-        response_body = []
-        
-        scope = {
-            'type': 'http',
-            'asgi': {'version': '3.0'},
-            'http_version': '1.1',
-            'method': method,
-            'path': path,
-            'raw_path': path.encode('latin-1'),
-            'query_string': query_string,
-            'headers': headers,
-            'server': ('localhost', 80),
-        }
-        
-        async def receive():
-            return {'type': 'http.request', 'body': body, 'more_body': False}
-            
-        async def send(message):
-            nonlocal response_status, response_headers, response_body
-            if message['type'] == 'http.response.start':
-                response_status = message['status']
-                for h_name, h_val in message.get('headers', []):
-                    response_headers.append((h_name.decode('latin-1'), h_val.decode('latin-1')))
-            elif message['type'] == 'http.response.body':
-                response_body.append(message.get('body', b''))
-                
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(app_instance(scope, receive, send))
-        except Exception as exc:
-            err_msg = json.dumps({
-                "error": "FastAPI Execution Failure",
-                "details": str(exc),
-                "traceback": traceback.format_exc(),
-                "path": path
-            })
-            response_status = 500
-            response_headers = [('content-type', 'application/json')]
-            response_body = [err_msg.encode('utf-8')]
-        finally:
-            loop.close()
-            
-        self.send_response(response_status)
-        for h_name, h_val in response_headers:
-            if h_name.lower() not in ('server', 'date'):
-                self.send_header(h_name, h_val)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        for chunk in response_body:
-            self.wfile.write(chunk)
+            for chunk in response_body:
+                self.wfile.write(chunk)
+        except Exception as fatal_err:
+            try:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "fatal_handler_error",
+                    "error": str(fatal_err),
+                    "traceback": traceback.format_exc()
+                }).encode('utf-8'))
+            except Exception:
+                pass
