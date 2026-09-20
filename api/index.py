@@ -16,6 +16,3 @@ for p in (str(current_dir), str(backend_dir), str(root_dir)):
 
 # Import real FastAPI application
 from app.main import app
-
-# Expose both app and handler for Vercel runtime
-handler = app
