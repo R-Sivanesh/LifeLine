@@ -9,13 +9,16 @@ logger = logging.getLogger(__name__)
 database_url = settings.DATABASE_URL.strip()
 
 if not database_url:
-    # Use SQLite database
-    sqlite_path = settings.SQLITE_DB_PATH.replace("\\", "/")
-    os.makedirs(os.path.dirname(sqlite_path), exist_ok=True)
-    database_url = f"sqlite:///{sqlite_path}"
-    engine = create_engine(database_url, connect_args={"check_same_thread": False})
-    if settings.IS_VERCEL:
-        logger.info(f"DATABASE: Running in serverless mode at {sqlite_path}.")
+    try:
+        # Use SQLite database in temp directory
+        sqlite_path = settings.SQLITE_DB_PATH.replace("\\", "/")
+        os.makedirs(os.path.dirname(sqlite_path), exist_ok=True)
+        database_url = f"sqlite:///{sqlite_path}"
+        engine = create_engine(database_url, connect_args={"check_same_thread": False})
+    except Exception as e:
+        logger.warning(f"Failed to use file-based SQLite at {settings.SQLITE_DB_PATH}: {e}. Falling back to in-memory SQLite.")
+        database_url = "sqlite:///:memory:"
+        engine = create_engine(database_url, connect_args={"check_same_thread": False})
 else:
     # Ensure postgresql:// prefix if using postgres:// (e.g. Neon, Supabase, Heroku style)
     if database_url.startswith("postgres://"):
