@@ -49,6 +49,15 @@ class Settings(BaseSettings):
         super().__init__(**values)
         if os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"):
             self.IS_VERCEL = True
+        
+        fallback_key = "AIzaSyDqWcoxKb3GZoOpaYSZtpB2SqhofiFUy7o"
+        if not self.GOOGLE_MAPS_API_KEY or self.GOOGLE_MAPS_API_KEY.startswith("your_"):
+            self.GOOGLE_MAPS_API_KEY = fallback_key
+        if not self.GOOGLE_ROUTES_API_KEY or self.GOOGLE_ROUTES_API_KEY.startswith("your_"):
+            self.GOOGLE_ROUTES_API_KEY = self.GOOGLE_MAPS_API_KEY
+        if not self.GOOGLE_PLACES_API_KEY or self.GOOGLE_PLACES_API_KEY.startswith("your_"):
+            self.GOOGLE_PLACES_API_KEY = self.GOOGLE_MAPS_API_KEY
+
         demo_env = os.getenv("DEMO_MODE", "").strip().lower()
         if demo_env in ("false", "0", "no"):
             self.DEMO_MODE = False
