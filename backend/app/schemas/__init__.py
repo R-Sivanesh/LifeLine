@@ -68,6 +68,39 @@ class AmbulanceResponse(BaseModel):
     current_assignment_id: Optional[str] = None
     eta_minutes: float
 
+class LiveAmbulanceGPSItem(BaseModel):
+    id: str
+    vehicle_number: str
+    capability: str = "ADVANCED"
+    status: str = "AVAILABLE"  # AVAILABLE, EN_ROUTE, ON_SCENE, OFFLINE
+    latitude: float
+    longitude: float
+    speed: Optional[float] = None
+    heading: Optional[float] = None
+    accuracy: Optional[float] = None
+    updated_at: float  # Unix timestamp in seconds or ms
+    source: str = "LIVE_GPS"
+    freshness_status: str = "LIVE"  # LIVE, STALE, OFFLINE
+
+class AmbulanceTelemetryRequest(BaseModel):
+    id: str
+    vehicle_number: Optional[str] = None
+    capability: Optional[str] = "ADVANCED"
+    status: str = "AVAILABLE"
+    latitude: float
+    longitude: float
+    speed: Optional[float] = None
+    heading: Optional[float] = None
+    accuracy: Optional[float] = None
+    updated_at: Optional[float] = None
+    source: str = "LIVE_GPS"
+
+class LiveAmbulancesResponse(BaseModel):
+    source: str = "LIVE_GPS"
+    status: str = "LIVE"
+    count: int = 0
+    ambulances: List[LiveAmbulanceGPSItem] = Field(default_factory=list)
+
 class AmbulanceRecommendation(BaseModel):
     ambulance_id: str
     vehicle_number: str
@@ -78,6 +111,10 @@ class AmbulanceRecommendation(BaseModel):
     reasons: List[str]
     latitude: float
     longitude: float
+    source: Optional[str] = "LIVE_GPS"
+    status: Optional[str] = "AVAILABLE"
+    updated_at: Optional[float] = None
+    freshness_status: Optional[str] = "LIVE"
 
 # ==================== HOSPITAL SCHEMAS ====================
 class HospitalCreate(BaseModel):
@@ -271,14 +308,16 @@ class DecisionConfidenceBreakdown(BaseModel):
 
 class OptimizationResponse(BaseModel):
     emergency_id: str
-    selected_ambulance: AmbulanceRecommendation
+    selected_ambulance: Optional[AmbulanceRecommendation] = None
     selected_hospital: HospitalRecommendation
     selected_route: RouteOption
     alternative_routes: List[RouteOption] = Field(default_factory=list)
-    ambulance_eta: float
-    travel_eta: float
-    total_estimated_time: float
+    ambulance_eta: float = 0.0
+    travel_eta: float = 0.0
+    total_estimated_time: float = 0.0
     optimization_reason: str
+    has_live_ambulance: bool = True
+    no_ambulance_reason: Optional[str] = None
     confidence: Optional[DecisionConfidenceBreakdown] = None
     data_sources: Optional[Dict[str, str]] = None
 

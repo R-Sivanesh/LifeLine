@@ -51,7 +51,16 @@ export const HomePage: React.FC = () => {
             </div>
           </div>
 
-          <nav className="flex items-center gap-1.5 sm:gap-3 text-xs font-mono">
+          <nav className="flex items-center gap-1.5 sm:gap-2.5 text-xs font-mono">
+            <Link
+              to="/ambulance/tracker"
+              className="px-2.5 py-1 rounded-lg text-cyan-400 hover:text-cyan-300 hover:bg-zinc-900 border border-cyan-500/30 transition-all flex items-center gap-1"
+              title="Open Mobile Ambulance GPS Tracker"
+            >
+              <Radio className="h-3.5 w-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Ambulance GPS</span>
+            </Link>
+
             <Link
               to="/history"
               className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition-all flex items-center gap-1"

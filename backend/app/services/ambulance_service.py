@@ -1,7 +1,17 @@
 import math
-from typing import List
+import time
+import logging
+from typing import List, Dict, Any, Optional, Tuple
 from app.models import Ambulance, Emergency
-from app.schemas import AmbulanceRecommendation
+from app.schemas import AmbulanceRecommendation, LiveAmbulanceGPSItem, AmbulanceTelemetryRequest
+
+logger = logging.getLogger(__name__)
+
+# In-memory storage for real-time live GPS telemetry from ambulance trackers / Firebase
+_LIVE_AMBULANCE_POOL: Dict[str, Dict[str, Any]] = {}
+
+STALE_THRESHOLD_SECONDS = 30.0
+OFFLINE_THRESHOLD_SECONDS = 60.0
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculates great-circle distance between two points in kilometers."""
@@ -20,13 +30,156 @@ def estimate_ambulance_eta(distance_km: float) -> float:
     # Add 1.5 min dispatch readiness buffer
     return round(transit_mins + 1.5, 1)
 
-def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[AmbulanceRecommendation]:
+def evaluate_telemetry_freshness(updated_at_timestamp: float) -> Tuple[str, float]:
     """
-    Deterministically ranks ambulances based on suitability, capability match,
-    equipment, distance, and ETA for a specific emergency.
+    Evaluates whether GPS telemetry is LIVE, STALE, or OFFLINE.
+    Accepts timestamps in both seconds and milliseconds.
+    """
+    now = time.time()
+    # Normalize milliseconds to seconds if needed
+    ts = updated_at_timestamp / 1000.0 if updated_at_timestamp > 1e11 else updated_at_timestamp
+    age_seconds = max(0.0, now - ts)
+    
+    if age_seconds <= STALE_THRESHOLD_SECONDS:
+        return "LIVE", age_seconds
+    elif age_seconds <= OFFLINE_THRESHOLD_SECONDS:
+        return "STALE", age_seconds
+    else:
+        return "OFFLINE", age_seconds
+
+def update_live_ambulance_telemetry(req: AmbulanceTelemetryRequest) -> LiveAmbulanceGPSItem:
+    """Updates in-memory live GPS telemetry for an ambulance device."""
+    now_ts = req.updated_at if req.updated_at else (time.time() * 1000.0)
+    
+    # Evaluate freshness
+    freshness, age = evaluate_telemetry_freshness(now_ts)
+    vehicle_num = req.vehicle_number or f"{req.id} (Live GPS)"
+    
+    record = {
+        "id": req.id,
+        "vehicle_number": vehicle_num,
+        "capability": req.capability or "ADVANCED",
+        "status": req.status,
+        "latitude": req.latitude,
+        "longitude": req.longitude,
+        "speed": req.speed,
+        "heading": req.heading,
+        "accuracy": req.accuracy,
+        "updated_at": now_ts,
+        "source": "LIVE_GPS",
+        "freshness_status": freshness
+    }
+    
+    _LIVE_AMBULANCE_POOL[req.id] = record
+    return LiveAmbulanceGPSItem(**record)
+
+def get_live_ambulances_list() -> List[LiveAmbulanceGPSItem]:
+    """Returns all active live GPS ambulances with recalculated freshness status."""
+    result: List[LiveAmbulanceGPSItem] = []
+    for amb_id, data in _LIVE_AMBULANCE_POOL.items():
+        freshness, _ = evaluate_telemetry_freshness(data["updated_at"])
+        item_dict = dict(data)
+        item_dict["freshness_status"] = freshness
+        result.append(LiveAmbulanceGPSItem(**item_dict))
+    return result
+
+def rank_live_ambulances(
+    live_ambulances: List[Dict[str, Any]],
+    emergency: Emergency
+) -> List[AmbulanceRecommendation]:
+    """
+    Ranks real GPS-tracked ambulances for dispatch.
+    
+    CRITICAL PRODUCT RULES:
+    1. Only AVAILABLE ambulances with fresh GPS telemetry (<= 30s) are selected for dispatch.
+    2. Stale (> 30s) and Offline (> 60s) ambulances are marked but NOT selected for response plan.
+    3. Status is checked (must be AVAILABLE, not EN_ROUTE or ON_SCENE).
     """
     recommendations: List[AmbulanceRecommendation] = []
+    is_critical = emergency.severity in ("CRITICAL", "HIGH") or emergency.critical_patient_count > 0
     
+    for amb in live_ambulances:
+        lat = amb.get("latitude")
+        lon = amb.get("longitude")
+        if lat is None or lon is None or (lat == 0.0 and lon == 0.0):
+            continue
+            
+        updated_at = amb.get("updated_at", time.time() * 1000.0)
+        freshness, age_sec = evaluate_telemetry_freshness(updated_at)
+        status = amb.get("status", "AVAILABLE")
+        capability = amb.get("capability", "ADVANCED")
+        v_num = amb.get("vehicle_number", f"{amb.get('id', 'AMB')} (Live GPS)")
+        amb_id = amb.get("id", "amb-live")
+        
+        dist_km = calculate_haversine_distance(emergency.latitude, emergency.longitude, lat, lon)
+        eta = estimate_ambulance_eta(dist_km)
+        
+        reasons: List[str] = []
+        score = 0.0
+        
+        # 1. Freshness & Live Telemetry Verification (0 - 30 points)
+        if freshness == "LIVE" and status == "AVAILABLE":
+            score += 30.0
+            reasons.append(f"Verified live GPS stream (Updated ~{age_sec:.0f}s ago)")
+        elif freshness == "STALE":
+            score += 0.0
+            reasons.append(f"Telemetry stale ({age_sec:.0f}s old) — excluded from primary response")
+        elif status != "AVAILABLE":
+            score += 0.0
+            reasons.append(f"Vehicle status is {status} (not available for new dispatch)")
+        else:
+            score += 0.0
+            reasons.append(f"Vehicle offline ({age_sec:.0f}s old)")
+            
+        # 2. Capability Score (0 - 40 points)
+        if is_critical:
+            if capability == "ICU":
+                score += 40.0
+                reasons.append("Equipped as Mobile ICU with critical life support")
+            elif capability == "ADVANCED":
+                score += 38.0
+                reasons.append("Advanced Life Support (ALS) emergency capability")
+            else:
+                score += 15.0
+                reasons.append("Basic Life Support (BLS)")
+        else:
+            score += 35.0
+            reasons.append(f"Capability: {capability}")
+            
+        # 3. Proximity & ETA Score (0 - 30 points)
+        proximity_score = max(0.0, 30.0 - (eta * 2.0))
+        score += proximity_score
+        reasons.append(f"Estimated scene arrival: ~{eta:.0f} min ({dist_km:.1f} km away)")
+        
+        match_score = round(min(100.0, max(0.0, score)), 1)
+        
+        recommendations.append(
+            AmbulanceRecommendation(
+                ambulance_id=amb_id,
+                vehicle_number=v_num,
+                capability=capability,
+                distance_km=dist_km,
+                eta_minutes=eta,
+                match_score=match_score,
+                reasons=reasons,
+                latitude=lat,
+                longitude=lon,
+                source="LIVE_GPS",
+                status=status,
+                updated_at=updated_at,
+                freshness_status=freshness
+            )
+        )
+        
+    # Sort descending by match_score, then ascending by eta_minutes
+    recommendations.sort(key=lambda r: (-r.match_score, r.eta_minutes))
+    return recommendations
+
+def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[AmbulanceRecommendation]:
+    """
+    Deterministically ranks database/seeded ambulances (used primarily in DEMO/SIMULATION mode).
+    """
+    recommendations: List[AmbulanceRecommendation] = []
     is_critical = emergency.severity in ("CRITICAL", "HIGH") or emergency.critical_patient_count > 0
     
     for amb in ambulances:
@@ -97,10 +250,13 @@ def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[A
                 match_score=match_score,
                 reasons=reasons,
                 latitude=amb.latitude,
-                longitude=amb.longitude
+                longitude=amb.longitude,
+                source="DEMO_TELEMETRY",
+                status=amb.status,
+                updated_at=time.time() * 1000.0,
+                freshness_status="DEMO"
             )
         )
     
-    # Sort descending by match_score, then ascending by eta_minutes
     recommendations.sort(key=lambda r: (-r.match_score, r.eta_minutes))
     return recommendations

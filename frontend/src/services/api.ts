@@ -147,6 +147,29 @@ export const lifelineApi = {
     return res.data;
   },
 
+  // Live Ambulances & GPS Telemetry
+  getLiveAmbulances: async (): Promise<{ source: string; status: string; count: number; ambulances: any[] }> => {
+    const res = await api.get('/ambulances/live');
+    return res.data;
+  },
+
+  sendAmbulanceTelemetry: async (telemetry: {
+    id: string;
+    vehicle_number?: string;
+    capability?: string;
+    status: string;
+    latitude: number;
+    longitude: number;
+    speed?: number | null;
+    heading?: number | null;
+    accuracy?: number | null;
+    updated_at?: number;
+    source?: string;
+  }) => {
+    const res = await api.post('/ambulances/telemetry', telemetry);
+    return res.data;
+  },
+
   // Ambulances & Hospitals
   listAmbulances: async (): Promise<Ambulance[]> => {
     const res = await api.get('/ambulances');

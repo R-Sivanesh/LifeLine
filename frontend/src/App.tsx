@@ -4,6 +4,7 @@ import { HomePage } from './pages/HomePage';
 import { OperationsPage } from './pages/OperationsPage';
 import { EmergencyDetailPage } from './pages/EmergencyDetailPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { AmbulanceTrackerPage } from './pages/AmbulanceTrackerPage';
 
 export const App: React.FC = () => {
   return (
@@ -19,6 +20,10 @@ export const App: React.FC = () => {
         <Route path="/operations" element={<OperationsPage />} />
         <Route path="/simulation" element={<OperationsPage />} />
         <Route path="/dashboard" element={<Navigate to="/operations" replace />} />
+        
+        {/* Ambulance Driver Real-time GPS Tracker */}
+        <Route path="/ambulance/tracker" element={<AmbulanceTrackerPage />} />
+        <Route path="/tracker" element={<AmbulanceTrackerPage />} />
         
         {/* History & Case Log */}
         <Route path="/history" element={<HistoryPage />} />

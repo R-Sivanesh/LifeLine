@@ -100,11 +100,12 @@ async def optimize_emergency_flow(id: str, db: Session = Depends(get_db)):
     optimization_result = await run_golden_minute_optimization(emg, ambulances, hospitals, incidents)
     
     # Save or update dispatch record
+    amb_id = optimization_result.selected_ambulance.ambulance_id if optimization_result.selected_ambulance else "NO_AMBULANCE"
     dispatch = db.query(Dispatch).filter(Dispatch.emergency_id == id).first()
     if not dispatch:
         dispatch = Dispatch(
             emergency_id=id,
-            ambulance_id=optimization_result.selected_ambulance.ambulance_id,
+            ambulance_id=amb_id,
             hospital_id=optimization_result.selected_hospital.hospital_id,
             selected_route=optimization_result.selected_route.model_dump(),
             estimated_ambulance_eta=optimization_result.ambulance_eta,
@@ -114,7 +115,7 @@ async def optimize_emergency_flow(id: str, db: Session = Depends(get_db)):
         )
         db.add(dispatch)
     else:
-        dispatch.ambulance_id = optimization_result.selected_ambulance.ambulance_id
+        dispatch.ambulance_id = amb_id
         dispatch.hospital_id = optimization_result.selected_hospital.hospital_id
         dispatch.selected_route = optimization_result.selected_route.model_dump()
         dispatch.estimated_ambulance_eta = optimization_result.ambulance_eta

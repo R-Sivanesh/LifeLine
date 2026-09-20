@@ -292,7 +292,7 @@ export const SimulationPage: React.FC = () => {
                 <div className="pt-3 border-t border-zinc-800 grid grid-cols-3 gap-2 text-center text-xs font-mono">
                   <div className="bg-zinc-950 p-2 rounded-lg border border-zinc-800">
                     <div className="text-[10px] text-zinc-500">AMBULANCE</div>
-                    <div className="text-cyan-400 font-bold">{optimization.selected_ambulance.vehicle_number}</div>
+                    <div className="text-cyan-400 font-bold">{optimization.selected_ambulance?.vehicle_number || 'A-103'}</div>
                     <div className="text-[10px] text-zinc-400">{optimization.ambulance_eta}m ETA</div>
                   </div>
                   <div className="bg-zinc-950 p-2 rounded-lg border border-zinc-800">

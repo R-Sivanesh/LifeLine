@@ -129,7 +129,7 @@ export const EmergencyDetailPage: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-zinc-400">Assigned Ambulance:</span>
                       <span className="text-cyan-400 font-bold font-mono">
-                        {optimization.selected_ambulance.vehicle_number} ({optimization.ambulance_eta}m ETA)
+                        {optimization.selected_ambulance ? `${optimization.selected_ambulance.vehicle_number} (${optimization.ambulance_eta}m ETA)` : 'No Verified Live Unit'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">

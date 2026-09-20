@@ -802,99 +802,167 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
       {/* ========================================================================= */}
       {currentStep === 'PLAN_READY' && optimization && (
         <div className="space-y-5 animate-fadeIn">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span>Response Plan Ready</span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-0.5">
-                Fastest Estimated Care Path
-              </h1>
-            </div>
-
-            <div className="text-right">
-              <span className="text-3xl font-black text-amber-400 font-mono">
-                {optimization.total_estimated_time.toFixed(0)}
-              </span>
-              <span className="text-xs font-bold text-amber-400 font-mono ml-1">MIN TOTAL</span>
-              <div className="text-[10px] text-zinc-400">Ambulance + Transit</div>
-            </div>
-          </div>
-
-          {/* Simple Triple Metric Result Card */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
-            {/* 1. Ambulance Card */}
-            <div className="flex items-center justify-between p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-lg">
-                  🚑
-                </div>
+          {optimization.has_live_ambulance && optimization.selected_ambulance ? (
+            <>
+              <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-bold text-sm text-white">
-                    {optimization.selected_ambulance.vehicle_number}
-                    <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">
-                      {optimization.selected_ambulance.capability}
-                    </span>
+                  <div className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <span>Response Plan Ready</span>
                   </div>
-                  <div className="text-xs text-zinc-400 mt-0.5">
-                    {optimization.selected_ambulance.distance_km.toFixed(1)} km from scene • Available
-                  </div>
+                  <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-0.5">
+                    Fastest Estimated Care Path
+                  </h1>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-mono font-bold text-cyan-400">
-                  {optimization.ambulance_eta.toFixed(0)} min
-                </div>
-                <div className="text-[10px] text-zinc-500 uppercase font-mono">Scene ETA</div>
-              </div>
-            </div>
 
-            {/* 2. Destination Hospital Card */}
-            <div className="flex items-center justify-between p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-lg">
-                  🏥
-                </div>
-                <div>
-                  <div className="font-bold text-sm text-white truncate max-w-[200px] sm:max-w-xs">
-                    {optimization.selected_hospital.name}
-                  </div>
-                  <div className="text-xs text-zinc-400 mt-0.5">
-                    {optimization.selected_hospital.trauma_capable ? 'Level 1 Trauma' : 'Emergency Unit'} • Verified Facility
-                  </div>
+                <div className="text-right">
+                  <span className="text-3xl font-black text-amber-400 font-mono">
+                    {optimization.total_estimated_time.toFixed(0)}
+                  </span>
+                  <span className="text-xs font-bold text-amber-400 font-mono ml-1">MIN TOTAL</span>
+                  <div className="text-[10px] text-zinc-400">Live GPS + Traffic Transit</div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-lg font-mono font-bold text-emerald-400">
-                  {optimization.travel_eta.toFixed(0)} min
-                </div>
-                <div className="text-[10px] text-zinc-500 uppercase font-mono">Transit ETA</div>
-              </div>
-            </div>
 
-            {/* 3. Why this plan? Human-understandable explanation */}
-            {explanation && (
-              <div className="p-3 bg-zinc-950/50 border border-zinc-800/80 rounded-xl text-xs space-y-1.5 font-sans">
-                <div className="font-bold font-mono text-zinc-400 uppercase text-[11px] flex items-center gap-1">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>Why This Plan?</span>
+              {/* Verified Result Card */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
+                {/* 1. Verified Live Ambulance */}
+                <div className="flex items-center justify-between p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-black text-lg">
+                      🚑
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm text-white">
+                        {optimization.selected_ambulance.vehicle_number}
+                        <span className="ml-2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                          LIVE LOCATION
+                        </span>
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        {optimization.selected_ambulance.distance_km.toFixed(1)} km away • {optimization.selected_ambulance.capability}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-mono font-bold text-cyan-400">
+                      {optimization.ambulance_eta.toFixed(0)} min
+                    </div>
+                    <div className="text-[10px] text-zinc-500 uppercase font-mono">Scene ETA</div>
+                  </div>
                 </div>
-                <p className="text-zinc-300 leading-relaxed text-[11px]">
-                  {explanation.overall_reason || optimization.optimization_reason}
+
+                {/* 2. Real Destination Hospital */}
+                <div className="flex items-center justify-between p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-lg">
+                      🏥
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm text-white truncate max-w-[200px] sm:max-w-xs">
+                        {optimization.selected_hospital.name}
+                      </div>
+                      <div className="text-xs text-emerald-400/90 mt-0.5 font-mono text-[11px]">
+                        LIVE • Google Places (New)
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-mono font-bold text-emerald-400">
+                      {optimization.travel_eta.toFixed(0)} min
+                    </div>
+                    <div className="text-[10px] text-zinc-500 uppercase font-mono">Transit ETA</div>
+                  </div>
+                </div>
+
+                {/* 3. Explanation */}
+                {explanation && (
+                  <div className="p-3 bg-zinc-950/50 border border-zinc-800/80 rounded-xl text-xs space-y-1.5 font-sans">
+                    <div className="font-bold font-mono text-zinc-400 uppercase text-[11px] flex items-center gap-1">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                      <span>Dispatch Decision Breakdown</span>
+                    </div>
+                    <p className="text-zinc-300 leading-relaxed text-[11px]">
+                      {explanation.overall_reason || optimization.optimization_reason}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Primary Action */}
+              <button
+                onClick={() => setCurrentStep('ACTIVE_RESPONSE')}
+                className="w-full p-4 sm:p-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 shadow-2xl shadow-emerald-600/40 border border-emerald-400 transition-all active:scale-[0.98]"
+              >
+                <span>START ACTIVE RESPONSE</span>
+                <Navigation className="h-5 w-5" />
+              </button>
+            </>
+          ) : (
+            /* Honest No Live Ambulance State */
+            <div className="space-y-4">
+              <div className="p-5 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-2xl space-y-3">
+                <div className="flex items-center gap-2.5 text-amber-400 font-black text-lg">
+                  <AlertTriangle className="h-6 w-6 shrink-0 text-amber-400" />
+                  <span>NO VERIFIED LIVE AMBULANCE AVAILABLE</span>
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  {optimization.no_ambulance_reason ||
+                    'LifeLine could not verify a nearby ambulance with a current GPS location.'}
                 </p>
+                <div className="pt-2 border-t border-amber-500/20 text-[11px] font-mono text-zinc-400">
+                  Data Honesty Rule: LifeLine never invents fake ambulance positions or artificial ETAs.
+                </div>
               </div>
-            )}
-          </div>
 
-          {/* Primary Action: START ACTIVE RESPONSE */}
-          <button
-            onClick={() => setCurrentStep('ACTIVE_RESPONSE')}
-            className="w-full p-4 sm:p-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 shadow-2xl shadow-emerald-600/40 border border-emerald-400 transition-all active:scale-[0.98]"
-          >
-            <span>START ACTIVE RESPONSE</span>
-            <Navigation className="h-5 w-5" />
-          </button>
+              {/* Destination Hospital is Still Discovered */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 shadow-xl space-y-3">
+                <div className="text-xs font-mono text-zinc-400 uppercase font-bold">
+                  Nearest Verified Receiving Hospital:
+                </div>
+                <div className="flex items-center justify-between p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🏥</span>
+                    <div>
+                      <div className="font-bold text-sm text-white">
+                        {optimization.selected_hospital.name}
+                      </div>
+                      <div className="text-xs text-emerald-400 font-mono">
+                        LIVE • Google Places (New)
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-base font-mono font-bold text-emerald-400">
+                      {optimization.travel_eta.toFixed(0)} min
+                    </div>
+                    <div className="text-[10px] text-zinc-500 uppercase font-mono">Driving Time</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions for User */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <a
+                  href="tel:108"
+                  className="p-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all text-center"
+                >
+                  <PhoneCall className="h-4 w-4" />
+                  <span>CALL 108 EMERGENCY</span>
+                </a>
+
+                <a
+                  href="/ambulance/tracker"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-cyan-400 font-bold text-sm flex items-center justify-center gap-2 transition-all text-center"
+                >
+                  <Radio className="h-4 w-4" />
+                  <span>OPEN AMBULANCE TRACKER</span>
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

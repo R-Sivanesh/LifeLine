@@ -21,6 +21,30 @@ export interface Emergency {
   created_at?: string;
 }
 
+export type LiveAmbulanceStatus = 'AVAILABLE' | 'EN_ROUTE' | 'ON_SCENE' | 'OFFLINE';
+
+export interface LiveAmbulanceGPS {
+  id: string;
+  vehicle_number: string;
+  capability: AmbulanceCapability;
+  status: LiveAmbulanceStatus;
+  latitude: number;
+  longitude: number;
+  speed?: number | null;
+  heading?: number | null;
+  accuracy?: number | null;
+  updated_at: number; // timestamp in ms or seconds
+  source: 'LIVE_GPS' | 'DEMO_TELEMETRY' | string;
+  freshness_status: 'LIVE' | 'STALE' | 'OFFLINE' | 'DEMO' | string;
+}
+
+export interface LiveAmbulancesResponse {
+  source: string;
+  status: string;
+  count: number;
+  ambulances: LiveAmbulanceGPS[];
+}
+
 export interface AmbulanceRecommendation {
   ambulance_id: string;
   vehicle_number: string;
@@ -31,6 +55,10 @@ export interface AmbulanceRecommendation {
   reasons: string[];
   latitude: number;
   longitude: number;
+  source?: 'LIVE_GPS' | 'DEMO_TELEMETRY' | string;
+  status?: LiveAmbulanceStatus | string;
+  updated_at?: number;
+  freshness_status?: 'LIVE' | 'STALE' | 'OFFLINE' | 'DEMO' | string;
 }
 
 export interface Ambulance {
@@ -148,7 +176,7 @@ export interface DecisionConfidenceBreakdown {
 
 export interface OptimizationResult {
   emergency_id: string;
-  selected_ambulance: AmbulanceRecommendation;
+  selected_ambulance?: AmbulanceRecommendation | null;
   selected_hospital: HospitalRecommendation;
   selected_route: RouteOption;
   alternative_routes: RouteOption[];
@@ -156,6 +184,8 @@ export interface OptimizationResult {
   travel_eta: number;
   total_estimated_time: number;
   optimization_reason: string;
+  has_live_ambulance?: boolean;
+  no_ambulance_reason?: string | null;
   confidence?: DecisionConfidenceBreakdown;
   confidence_breakdown?: DecisionConfidenceBreakdown;
   data_sources?: Record<string, string>;
