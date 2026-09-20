@@ -6,19 +6,21 @@ from app.database import Base, engine, SessionLocal
 from app.seed.demo_data import seed_database
 from app.api import health, emergencies, ambulances, hospitals, routes, demo, ai, data_status, location
 
-def init_db():
-    try:
-        Base.metadata.create_all(bind=engine)
-        db = SessionLocal()
-        try:
-            seed_database(db, force_reset=False)
-        finally:
-            db.close()
-    except Exception as e:
-        print(f"DB bootstrap notice: {e}")
+_db_initialized = False
 
-# Bootstrap database immediately on module load for serverless environments
-init_db()
+def ensure_db():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            Base.metadata.create_all(bind=engine)
+            db = SessionLocal()
+            try:
+                seed_database(db, force_reset=False)
+            finally:
+                db.close()
+            _db_initialized = True
+        except Exception as e:
+            print(f"DB bootstrap notice: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,6 +52,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def ensure_db_middleware(request, call_next):
+    ensure_db()
+    return await call_next(request)
 
 # Include Routers with /api prefix
 app.include_router(health.router, prefix="/api")
