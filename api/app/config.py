@@ -13,6 +13,11 @@ if root_env.exists():
 else:
     load_dotenv()
 
+# Sanitize any empty environment variables so Pydantic does not fail type parsing
+for key in list(os.environ.keys()):
+    if os.environ[key] == "":
+        del os.environ[key]
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
