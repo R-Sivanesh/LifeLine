@@ -177,6 +177,12 @@ async def run_golden_minute_optimization(
             f"via {selected_route.name} ({travel_eta:.0f}m transit). No verified live ambulance currently in range."
         )
     
+    # 6. Priority Corridor Intelligence
+    from app.services.google_routes_service import analyze_emergency_priority_corridor
+    from app.schemas import EmergencyPriorityCorridorResponse
+    corridor_dict = analyze_emergency_priority_corridor(assessed_routes)
+    corridor_obj = EmergencyPriorityCorridorResponse(**corridor_dict) if corridor_dict else None
+
     data_sources_map = {
         "traffic": traffic_source,
         "hospitals": hospital_source,
@@ -202,7 +208,8 @@ async def run_golden_minute_optimization(
         has_live_ambulance=has_live_amb,
         no_ambulance_reason=no_amb_reason,
         confidence=conf_obj,
-        data_sources=data_sources_map
+        data_sources=data_sources_map,
+        corridor_analysis=corridor_obj
     )
 
 

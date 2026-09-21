@@ -32,21 +32,21 @@ export const DataSourcesBadge: React.FC<DataSourcesBadgeProps> = ({ statusData: 
         </div>
 
         {/* Traffic */}
-        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${status?.traffic.status === 'LIVE' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' : 'bg-amber-950/60 border-amber-500/40 text-amber-300'}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${status?.traffic.status === 'LIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-          <span>{status?.traffic.status === 'LIVE' ? 'LIVE TRAFFIC' : 'DEMO ROUTING'}</span>
+        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${status?.traffic?.status === 'LIVE' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' : 'bg-amber-950/60 border-amber-500/40 text-amber-300'}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${status?.traffic?.status === 'LIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span>{status?.traffic?.status === 'LIVE' ? 'LIVE TRAFFIC' : 'DEMO ROUTING'}</span>
         </span>
 
         {/* AI Dispatcher */}
-        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${status?.ai_dispatcher.status === 'LIVE' ? 'bg-cyan-950/60 border-cyan-500/40 text-cyan-300' : 'bg-amber-950/60 border-amber-500/40 text-amber-300'}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${status?.ai_dispatcher.status === 'LIVE' ? 'bg-cyan-400 animate-pulse' : 'bg-amber-400'}`}></span>
-          <span>{status?.ai_dispatcher.status === 'LIVE' ? 'GEMINI DISPATCH' : 'RULE ENGINE'}</span>
+        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border ${status?.ai_dispatcher?.status === 'LIVE' ? 'bg-cyan-950/60 border-cyan-500/40 text-cyan-300' : 'bg-amber-950/60 border-amber-500/40 text-amber-300'}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${status?.ai_dispatcher?.status === 'LIVE' ? 'bg-cyan-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span>{status?.ai_dispatcher?.status === 'LIVE' ? 'GEMINI DISPATCH' : 'RULE ENGINE'}</span>
         </span>
 
         {/* Places */}
         <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-          <span>{status?.hospitals.status === 'LIVE' ? 'GOOGLE PLACES' : 'VERIFIED REGISTRY'}</span>
+          <span>{status?.hospitals?.status === 'LIVE' ? 'GOOGLE PLACES' : 'VERIFIED REGISTRY'}</span>
         </span>
 
         {/* Ambulance Telemetry */}

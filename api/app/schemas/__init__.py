@@ -2,6 +2,15 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Any, Dict
 from datetime import datetime
 
+# ==================== EMERGENCY SESSION SCHEMAS ====================
+class EmergencySessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    session_token: str
+    session_code: str
+    emergency_id: str
+    expires_at: datetime
+    is_active: bool
+
 # ==================== EMERGENCY SCHEMAS ====================
 class EmergencyCreate(BaseModel):
     description: str
@@ -27,6 +36,8 @@ class EmergencyAnalysisResponse(BaseModel):
 class EmergencyResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
+    code: Optional[str] = None
+    session_id: Optional[str] = None
     title: Optional[str] = None
     description: str
     incident_type: str
@@ -36,7 +47,47 @@ class EmergencyResponse(BaseModel):
     critical_patient_count: int
     severity: str
     status: str
+    assigned_ambulance_id: Optional[str] = None
+    assigned_driver_id: Optional[str] = None
+    assigned_hospital_id: Optional[str] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    session: Optional[EmergencySessionResponse] = None
+
+# ==================== DRIVER & AUTH SCHEMAS ====================
+class DriverGoogleAuthRequest(BaseModel):
+    google_id: Optional[str] = None
+    email: str
+    name: str
+    phone: Optional[str] = None
+    ambulance_id: Optional[str] = None
+    role: str = "DRIVER"  # DRIVER, OPERATOR
+
+class DriverResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+    email: str
+    phone: Optional[str] = None
+    role: str
+    assigned_ambulance_id: Optional[str] = None
+    status: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    last_active_at: Optional[datetime] = None
+
+class DriverAuthResponse(BaseModel):
+    driver: DriverResponse
+    token: str
+    ambulance: Optional[Any] = None
+
+class DriverStatusUpdate(BaseModel):
+    status: str  # AVAILABLE, EN_ROUTE, ON_SCENE, OFFLINE
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    speed: Optional[float] = None
+    heading: Optional[float] = None
+    accuracy: Optional[float] = None
 
 # ==================== AMBULANCE SCHEMAS ====================
 class AmbulanceCreate(BaseModel):
@@ -53,6 +104,7 @@ class AmbulanceUpdate(BaseModel):
     capability: Optional[str] = None
     equipment: Optional[List[str]] = None
     status: Optional[str] = None
+    current_driver_id: Optional[str] = None
     current_assignment_id: Optional[str] = None
     eta_minutes: Optional[float] = None
 
@@ -65,8 +117,10 @@ class AmbulanceResponse(BaseModel):
     status: str
     capability: str
     equipment: List[str] = Field(default_factory=list)
+    current_driver_id: Optional[str] = None
     current_assignment_id: Optional[str] = None
     eta_minutes: float
+    last_gps_at: Optional[datetime] = None
 
 class LiveAmbulanceGPSItem(BaseModel):
     id: str
@@ -81,6 +135,8 @@ class LiveAmbulanceGPSItem(BaseModel):
     updated_at: float  # Unix timestamp in seconds or ms
     source: str = "LIVE_GPS"
     freshness_status: str = "LIVE"  # LIVE, STALE, OFFLINE
+    driver_id: Optional[str] = None
+    driver_name: Optional[str] = None
 
 class AmbulanceTelemetryRequest(BaseModel):
     id: str
@@ -94,6 +150,7 @@ class AmbulanceTelemetryRequest(BaseModel):
     accuracy: Optional[float] = None
     updated_at: Optional[float] = None
     source: str = "LIVE_GPS"
+    driver_id: Optional[str] = None
 
 class LiveAmbulancesResponse(BaseModel):
     source: str = "LIVE_GPS"
@@ -115,12 +172,65 @@ class AmbulanceRecommendation(BaseModel):
     status: Optional[str] = "AVAILABLE"
     updated_at: Optional[float] = None
     freshness_status: Optional[str] = "LIVE"
+    driver_id: Optional[str] = None
+    driver_name: Optional[str] = None
+
+# ==================== DISPATCH & ATOMIC CONCURRENCY SCHEMAS ====================
+class DriverAlertResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    emergency_id: str
+    driver_id: str
+    ambulance_id: str
+    status: str  # PENDING, ACCEPTED, DECLINED, CANCELLED, EXPIRED
+    alerted_at: datetime
+    emergency_code: Optional[str] = None
+    incident_type: Optional[str] = None
+    severity: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    description: Optional[str] = None
+
+class DriverAcceptRequest(BaseModel):
+    emergency_id: str
+    driver_id: str
+    ambulance_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+class DriverAcceptResponse(BaseModel):
+    success: bool
+    status: str  # ACCEPTED, ALREADY_ASSIGNED, FAILED
+    emergency_id: str
+    assigned_driver_id: Optional[str] = None
+    assigned_ambulance_id: Optional[str] = None
+    message: str
+    patient_latitude: float
+    patient_longitude: float
+    destination_hospital: Optional[Any] = None
+    navigation_route: Optional[Any] = None
+
+class DriverDeclineRequest(BaseModel):
+    emergency_id: str
+    driver_id: str
+    reason: Optional[str] = "DRIVER_DECLINED"
+
+class StateTransitionRequest(BaseModel):
+    emergency_id: str
+    target_status: str  # EN_ROUTE, ARRIVED, PATIENT_ONBOARD, TRANSPORTING, COMPLETED, CANCELLED
+    driver_id: Optional[str] = None
+    ambulance_id: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    notes: Optional[str] = None
 
 # ==================== HOSPITAL SCHEMAS ====================
 class HospitalCreate(BaseModel):
     name: str
     latitude: float
     longitude: float
+    address: Optional[str] = None
+    phone: Optional[str] = None
     emergency_available: bool = True
     trauma_capable: bool = False
     icu_available: bool = True
@@ -131,15 +241,19 @@ class HospitalCreate(BaseModel):
 class HospitalResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
+    place_id: Optional[str] = None
     name: str
     latitude: float
     longitude: float
+    address: Optional[str] = None
+    phone: Optional[str] = None
     emergency_available: bool
     trauma_capable: bool
     icu_available: bool
     available_beds: int
     specialities: List[str] = Field(default_factory=list)
     status: str
+    capacity_status: str = "UNKNOWN"
 
 class NearbyHospitalItem(BaseModel):
     id: str
@@ -185,7 +299,7 @@ class HospitalRecommendation(BaseModel):
     verification_status: Optional[str] = "PUBLICLY_VERIFIED"
     capacity_status: Optional[str] = "UNKNOWN"
 
-# ==================== ROUTING SCHEMAS ====================
+# ==================== ROUTING & CORRIDOR SCHEMAS ====================
 class Coordinate(BaseModel):
     latitude: float
     longitude: float
@@ -209,19 +323,33 @@ class RouteOption(BaseModel):
     incidents: List[Dict[str, Any]] = Field(default_factory=list)
     adjusted_eta_minutes: float = 0.0
     steps: List[RouteStep] = Field(default_factory=list)
+    traffic_delay_minutes: float = 0.0
+    congestion_level: str = "NORMAL"  # NORMAL, HEAVY, SEVERE
 
 class RouteResponse(BaseModel):
     routes: List[RouteOption]
 
 class RouteRiskAnalysisRequest(BaseModel):
     route_id: str
-    geometry: List[List[float]]  # list of [lon, lat]
+    geometry: List[List[float]]
 
 class RouteRiskResponse(BaseModel):
     route_id: str
     risk_level: str
     incidents: List[Dict[str, Any]]
     adjusted_eta_minutes: float
+
+class EmergencyPriorityCorridorResponse(BaseModel):
+    status: str  # OPTIMAL_CORRIDOR_ACTIVE, CONGESTION_DETECTED, REROUTE_RECOMMENDED
+    current_corridor_name: str
+    current_eta_minutes: float
+    traffic_delay_minutes: float
+    congestion_severity: str  # NORMAL, HEAVY, SEVERE
+    recommended_corridor: RouteOption
+    alternate_corridors: List[RouteOption] = Field(default_factory=list)
+    time_saved_minutes: float = 0.0
+    reason: str
+    traffic_control_integration: str = "INFORMATIONAL_ROUTING_ONLY (No public municipal signal override)"
 
 # ==================== LOCATION & GEOCODING SCHEMAS ====================
 class LocationSearchResult(BaseModel):
@@ -246,19 +374,19 @@ class ChatMessage(BaseModel):
     timestamp: Optional[datetime] = None
 
 class EmergencyDispatcherState(BaseModel):
-    intent: str = "UNKNOWN"  # GREETING, GENERAL_QUESTION, EMERGENCY_REPORT, LOCATION_UPDATE, ANSWER_TO_QUESTION, CONFIRMATION, CANCELLATION, UNKNOWN
-    conversation_state: str = "IDLE"  # IDLE, GREETING, INTAKE_STARTED, COLLECTING_LOCATION, COLLECTING_INCIDENT, COLLECTING_PATIENT_COUNT, COLLECTING_CRITICAL_STATUS, COLLECTING_ROAD_ACCESS, INFORMATION_SUFFICIENT, PLAN_READY
-    incident_type: Optional[str] = None  # ROAD_ACCIDENT, CARDIAC_ARREST, STROKE, FIRE_BURN, TRAUMA_INJURY, MEDICAL_EMERGENCY or None
-    severity: str = "MEDIUM"  # LOW, MEDIUM, HIGH, CRITICAL
+    intent: str = "UNKNOWN"
+    conversation_state: str = "IDLE"
+    incident_type: Optional[str] = None
+    severity: str = "MEDIUM"
     patient_count: Optional[int] = None
     critical_patient_count: Optional[int] = None
     location_description: Optional[str] = None
     location_confirmed: bool = False
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    location_source: Optional[str] = None  # USER_GPS, USER_SEARCH, USER_PIN, DEMO
+    location_source: Optional[str] = None
     accuracy_meters: Optional[float] = None
-    road_passability: Optional[str] = None  # PASSABLE, PARTIAL, BLOCKED, UNKNOWN
+    road_passability: Optional[str] = None
     special_requirements: List[str] = Field(default_factory=list)
     confidence: float = 0.0
     missing_information: List[str] = Field(default_factory=list)
@@ -295,8 +423,8 @@ class DataSourceStatusResponse(BaseModel):
     hospital_capacity: DataSourceItem
     road_incidents: DataSourceItem
     ai_dispatcher: DataSourceItem
-    map: Optional[DataSourceItem] = None
     database: Optional[DataSourceItem] = None
+    realtime: Optional[DataSourceItem] = None
 
 # ==================== OPTIMIZATION & DISPATCH SCHEMAS ====================
 class DecisionConfidenceBreakdown(BaseModel):
@@ -325,6 +453,7 @@ class OptimizationResponse(BaseModel):
     no_ambulance_reason: Optional[str] = None
     confidence: Optional[DecisionConfidenceBreakdown] = None
     data_sources: Optional[Dict[str, str]] = None
+    corridor_analysis: Optional[EmergencyPriorityCorridorResponse] = None
 
 class DecisionExplanationResponse(BaseModel):
     ambulance_reason: str
@@ -341,3 +470,42 @@ class RerouteResponse(BaseModel):
     new_route: Optional[RouteOption] = None
     old_route: Optional[RouteOption] = None
     confidence: Optional[DecisionConfidenceBreakdown] = None
+
+# ==================== ANALYTICS & AUDIT SCHEMAS ====================
+class AnalyticsMetricsResponse(BaseModel):
+    total_emergencies: int
+    active_emergencies: int
+    completed_emergencies: int
+    cancelled_emergencies: int
+    avg_dispatch_time_seconds: float
+    avg_driver_acceptance_time_seconds: float
+    avg_ambulance_response_time_minutes: float
+    avg_hospital_travel_time_minutes: float
+    driver_acceptance_rate_percent: float
+    no_ambulance_rate_percent: float
+    fleet_total_count: int
+    fleet_active_count: int
+    fleet_utilization_percent: float
+    gps_freshness_percent: float
+    traffic_delay_avg_minutes: float
+    corridor_time_saved_avg_minutes: float
+
+class AnalyticsHotspotItem(BaseModel):
+    latitude: float
+    longitude: float
+    incident_count: int
+    primary_severity: str
+    location_label: Optional[str] = None
+
+class EmergencyAuditEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    emergency_id: str
+    event_type: str
+    actor_type: str
+    actor_id: Optional[str] = None
+    description: str
+    metadata_json: Dict[str, Any] = Field(default_factory=dict)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    created_at: datetime

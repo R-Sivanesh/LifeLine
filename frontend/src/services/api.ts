@@ -13,7 +13,18 @@ import {
   ChatRequest,
   ChatResponse,
   DataSourceStatusResponse,
-  ChatMessage
+  ChatMessage,
+  Driver,
+  DriverAuthResponse,
+  DriverAlertItem,
+  DriverAcceptResponse,
+  SendOtpRequest,
+  SendOtpResponse,
+  VerifyOtpRequest,
+  VerifyOtpResponse,
+  AnalyticsMetrics,
+  AnalyticsHotspot,
+  EmergencyAuditEvent
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -23,6 +34,19 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json'
   }
+});
+
+// Attach session token if stored
+api.interceptors.request.use((config) => {
+  const sessionToken = sessionStorage.getItem('lifeline_session_token') || localStorage.getItem('lifeline_session_token');
+  if (sessionToken) {
+    config.headers['X-Session-Token'] = sessionToken;
+  }
+  const driverToken = localStorage.getItem('lifeline_driver_token');
+  if (driverToken) {
+    config.headers['Authorization'] = `Bearer ${driverToken}`;
+  }
+  return config;
 });
 
 export const lifelineApi = {
@@ -67,7 +91,30 @@ export const lifelineApi = {
     return res.data;
   },
 
-  // Emergencies
+  // Emergencies & Patient Session Persistence
+  validatePatientSession: async (sessionToken: string): Promise<{
+    is_active: boolean;
+    status?: string;
+    reason?: string;
+    emergency?: Emergency;
+    assigned_ambulance?: any;
+  }> => {
+    try {
+      const res = await api.get(`/emergencies/session/active/${encodeURIComponent(sessionToken)}`);
+      return res.data;
+    } catch (e) {
+      return { is_active: false, reason: 'NETWORK_OR_SERVER_ERROR' };
+    }
+  },
+
+  clearPatientSession: () => {
+    localStorage.removeItem('lifeline_patient_session');
+    localStorage.removeItem('lifeline_session_token');
+    localStorage.removeItem('lifeline_session_code');
+    sessionStorage.removeItem('lifeline_session_token');
+    sessionStorage.removeItem('lifeline_session_code');
+  },
+
   createEmergency: async (data: {
     description: string;
     latitude: number;
@@ -79,11 +126,25 @@ export const lifelineApi = {
     incident_type?: string;
   }): Promise<Emergency> => {
     const res = await api.post('/emergencies', data);
+    if (res.data?.session?.session_token) {
+      const sessionData = {
+        emergency_id: res.data.id,
+        session_token: res.data.session.session_token,
+        session_code: res.data.session.session_code,
+        created_at: Date.now(),
+        incident_type: res.data.incident_type
+      };
+      localStorage.setItem('lifeline_patient_session', JSON.stringify(sessionData));
+      localStorage.setItem('lifeline_session_token', res.data.session.session_token);
+      localStorage.setItem('lifeline_session_code', res.data.session.session_code);
+      sessionStorage.setItem('lifeline_session_token', res.data.session.session_token);
+      sessionStorage.setItem('lifeline_session_code', res.data.session.session_code);
+    }
     return res.data;
   },
 
-  listEmergencies: async (): Promise<Emergency[]> => {
-    const res = await api.get('/emergencies');
+  listEmergencies: async (statusFilter?: string): Promise<Emergency[]> => {
+    const res = await api.get('/emergencies', { params: { status_filter: statusFilter } });
     return res.data;
   },
 
@@ -94,6 +155,11 @@ export const lifelineApi = {
 
   updateEmergencyStatus: async (id: string, status: string): Promise<Emergency> => {
     const res = await api.patch(`/emergencies/${id}/status`, { status });
+    return res.data;
+  },
+
+  cancelEmergency: async (id: string, reason: string = 'PATIENT_CANCELLED'): Promise<Emergency> => {
+    const res = await api.post(`/emergencies/${id}/cancel`, null, { params: { reason } });
     return res.data;
   },
 
@@ -117,11 +183,6 @@ export const lifelineApi = {
     return res.data;
   },
 
-  decideEmergency: async (emergencyId: string): Promise<OptimizationResult> => {
-    const res = await api.post(`/emergencies/${emergencyId}/optimize`);
-    return res.data;
-  },
-
   getDecisionExplanation: async (emergencyId: string): Promise<DecisionExplanation> => {
     const res = await api.get(`/emergencies/${emergencyId}/decision`);
     return res.data;
@@ -129,6 +190,122 @@ export const lifelineApi = {
 
   triggerReroute: async (emergencyId: string): Promise<RerouteResult> => {
     const res = await api.post(`/emergencies/${emergencyId}/reroute`);
+    return res.data;
+  },
+
+  // Dispatch Engine & Atomic Acceptance
+  alertDrivers: async (emergencyId: string, ambulanceIds: string[]): Promise<DriverAlertItem[]> => {
+    const res = await api.post('/dispatch/alert', ambulanceIds, { params: { emergency_id: emergencyId } });
+    return res.data;
+  },
+
+  acceptDispatch: async (data: {
+    emergency_id: string;
+    driver_id: string;
+    ambulance_id?: string;
+    latitude?: number;
+    longitude?: number;
+  }): Promise<DriverAcceptResponse> => {
+    const res = await api.post('/dispatch/accept', data);
+    return res.data;
+  },
+
+  declineDispatch: async (data: {
+    emergency_id: string;
+    driver_id: string;
+    reason?: string;
+  }) => {
+    const res = await api.post('/dispatch/decline', data);
+    return res.data;
+  },
+
+  transitionEmergencyState: async (data: {
+    emergency_id: string;
+    target_status: string;
+    driver_id?: string;
+    ambulance_id?: string;
+    latitude?: number;
+    longitude?: number;
+    notes?: string;
+  }) => {
+    const res = await api.post('/dispatch/transition', data);
+    return res.data;
+  },
+
+  getDriverAlerts: async (driverId: string): Promise<DriverAlertItem[]> => {
+    const res = await api.get(`/dispatch/alerts/${driverId}`);
+    return res.data;
+  },
+
+  // Mobile OTP & Authentication
+  sendOtp: async (data: { phone: string; role?: string }): Promise<SendOtpResponse> => {
+    const res = await api.post('/auth/send-otp', data);
+    return res.data;
+  },
+
+  verifyOtp: async (data: VerifyOtpRequest): Promise<VerifyOtpResponse> => {
+    const res = await api.post('/auth/verify-otp', data);
+    if (res.data?.token) {
+      localStorage.setItem('lifeline_driver_token', res.data.token);
+      if (res.data.driver) {
+        localStorage.setItem('lifeline_driver_profile', JSON.stringify(res.data.driver));
+      }
+    }
+    return res.data;
+  },
+
+  // Driver Authentication & Management
+  driverGoogleLogin: async (data: {
+    email: string;
+    name: string;
+    google_id?: string;
+    phone?: string;
+    ambulance_id?: string;
+    role?: string;
+  }): Promise<DriverAuthResponse> => {
+    const res = await api.post('/auth/google-login', data);
+    if (res.data?.token) {
+      localStorage.setItem('lifeline_driver_token', res.data.token);
+      localStorage.setItem('lifeline_driver_profile', JSON.stringify(res.data.driver));
+    }
+    return res.data;
+  },
+
+  getCurrentDriver: async (driverId?: string): Promise<Driver> => {
+    const res = await api.get('/auth/me', { params: { driver_id: driverId } });
+    return res.data;
+  },
+
+  updateDriverStatus: async (driverId: string, statusData: {
+    status: string;
+    latitude?: number;
+    longitude?: number;
+    speed?: number;
+    heading?: number;
+    accuracy?: number;
+  }): Promise<Driver> => {
+    const res = await api.post('/auth/driver-status', statusData, { params: { driver_id: driverId } });
+    return res.data;
+  },
+
+  listDrivers: async (): Promise<Driver[]> => {
+    const res = await api.get('/auth/drivers');
+    return res.data;
+  },
+
+  // Operational Analytics & Audit History
+  getAnalyticsMetrics: async (): Promise<AnalyticsMetrics> => {
+    const res = await api.get('/analytics/metrics');
+    return res.data;
+  },
+
+  getAnalyticsHotspots: async (): Promise<AnalyticsHotspot[]> => {
+    const res = await api.get('/analytics/hotspots');
+    return res.data;
+  },
+
+  getAuditLog: async (params?: { emergency_id?: string; limit?: number }): Promise<EmergencyAuditEvent[]> => {
+    const res = await api.get('/analytics/audit-log', { params });
     return res.data;
   },
 
@@ -165,6 +342,7 @@ export const lifelineApi = {
     accuracy?: number | null;
     updated_at?: number;
     source?: string;
+    driver_id?: string;
   }) => {
     const res = await api.post('/ambulances/telemetry', telemetry);
     return res.data;

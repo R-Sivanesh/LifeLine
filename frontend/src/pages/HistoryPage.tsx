@@ -39,12 +39,9 @@ export const HistoryPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
-      <Header />
-
-      <main className="flex-1 p-4 lg:p-6 max-w-6xl w-full mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+    <div className="p-4 lg:p-6 max-w-6xl w-full mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight flex items-center gap-2">
               <Clock className="h-5 w-5 text-cyan-400" />
@@ -142,7 +139,6 @@ export const HistoryPage: React.FC = () => {
             ))}
           </div>
         )}
-      </main>
     </div>
   );
 };

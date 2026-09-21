@@ -52,11 +52,13 @@ export type FlowStep =
 interface EmergencyAssistantFlowProps {
   initialIncidentType?: string;
   onExitFlow?: () => void;
+  onEmergencyCreated?: (emergency: Emergency, optimization?: OptimizationResult | null) => void;
 }
 
 export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
   initialIncidentType,
-  onExitFlow
+  onExitFlow,
+  onEmergencyCreated
 }) => {
   // State Machine Step
   const [currentStep, setCurrentStep] = useState<FlowStep>(
@@ -320,6 +322,15 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
       const opt = await lifelineApi.optimizeEmergency(emg.id);
       setOptimization(opt);
       setAnalysisProgress(80);
+
+      // Trigger dispatch alert to eligible ambulances
+      if (opt.selected_ambulance) {
+        try {
+          await lifelineApi.alertDrivers(emg.id, [opt.selected_ambulance.ambulance_id]);
+        } catch (alertErr) {
+          console.warn('Dispatch alert broadcast note:', alertErr);
+        }
+      }
 
       // Get explanation
       const exp = await lifelineApi.getDecisionExplanation(emg.id);
@@ -1028,7 +1039,13 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
 
               {/* Primary Action */}
               <button
-                onClick={() => setCurrentStep('ACTIVE_RESPONSE')}
+                onClick={() => {
+                  if (onEmergencyCreated && createdEmergency) {
+                    onEmergencyCreated(createdEmergency, optimization);
+                  } else {
+                    setCurrentStep('ACTIVE_RESPONSE');
+                  }
+                }}
                 className="w-full p-4 sm:p-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 shadow-2xl shadow-emerald-600/40 border border-emerald-400 transition-all active:scale-[0.98]"
               >
                 <span>START ACTIVE RESPONSE</span>

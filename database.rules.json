@@ -1,0 +1,34 @@
+{
+  "rules": {
+    "ambulances": {
+      ".read": true,
+      "$ambulance_id": {
+        ".write": "auth != null || newData.hasChildren(['latitude', 'longitude', 'status', 'updated_at'])",
+        ".validate": "newData.hasChildren(['latitude', 'longitude', 'status', 'updated_at'])",
+        "latitude": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+        "longitude": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+        "status": { ".validate": "newData.isString()" },
+        "updated_at": { ".validate": "newData.isNumber()" }
+      }
+    },
+    "emergencies": {
+      "$emergency_id": {
+        ".read": true,
+        ".write": "auth != null || !data.exists() || data.child('session_token').val() === newData.child('session_token').val()"
+      }
+    },
+    "driver_alerts": {
+      "$driver_id": {
+        ".read": true,
+        ".write": "auth != null || true",
+        "$emergency_id": {
+          ".validate": "newData.hasChildren(['emergency_id', 'status', 'alerted_at'])"
+        }
+      }
+    },
+    "traffic_events": {
+      ".read": true,
+      ".write": "auth != null"
+    }
+  }
+}

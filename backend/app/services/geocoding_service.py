@@ -155,9 +155,11 @@ async def reverse_geocode(latitude: float, longitude: float) -> LocationReverseR
     except Exception as e:
         logger.warning(f"Reverse geocode lookup failed ({str(e)})")
 
+    # Regional intelligent fallback
+    region_name = "Chennai, Tamil Nadu" if (12.8 <= latitude <= 13.3 and 80.0 <= longitude <= 80.4) else f"{latitude:.4f}, {longitude:.4f}"
     return LocationReverseResult(
-        formatted_address=f"Location at {latitude:.4f}, {longitude:.4f}",
-        place_name=f"Lat: {latitude:.4f}, Lon: {longitude:.4f}",
+        formatted_address=f"Location at {latitude:.4f}, {longitude:.4f} ({region_name})",
+        place_name=f"Scene ({region_name})",
         latitude=latitude,
         longitude=longitude,
         source="COORDINATE_FALLBACK"

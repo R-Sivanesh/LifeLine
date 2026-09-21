@@ -174,6 +174,19 @@ async def compute_google_routes(
                             is_suspicious = (straight_dist_km < 15.0 and dur_mins > 90.0) or (straight_dist_km < 30.0 and dur_mins > 180.0)
                             risk_level = "BLOCKED" if is_suspicious else "LOW"
 
+                            # Static vs Live Traffic Duration for congestion delay analysis
+                            static_dur_str = r.get("staticDuration", dur_str).replace("s", "")
+                            static_secs = float(static_dur_str) if static_dur_str else dur_secs
+                            traffic_delay_mins = max(0.0, round((dur_secs - static_secs) / 60.0, 1))
+                            
+                            # Congestion level classification
+                            if traffic_delay_mins > 8.0 or (dur_secs / max(1.0, static_secs) >= 1.6):
+                                congestion_lvl = "SEVERE"
+                            elif traffic_delay_mins > 3.0 or (dur_secs / max(1.0, static_secs) >= 1.25):
+                                congestion_lvl = "HEAVY"
+                            else:
+                                congestion_lvl = "NORMAL"
+
                             polyline_str = r.get("polyline", {}).get("encodedPolyline", "")
                             coords = decode_polyline(polyline_str) if polyline_str else []
                             
@@ -201,7 +214,9 @@ async def compute_google_routes(
                                     risk_level=risk_level,
                                     incidents=[],
                                     adjusted_eta_minutes=dur_mins,
-                                    steps=steps_list
+                                    steps=steps_list,
+                                    traffic_delay_minutes=traffic_delay_mins,
+                                    congestion_level=congestion_lvl
                                 )
                             )
                             
@@ -219,3 +234,71 @@ async def compute_google_routes(
     # Fallback when Google key is absent or fails
     fallback_routes = generate_synthesized_routes(origin, destination)
     return fallback_routes, "Synthesized Corridor Model (Offline Fallback)", "UNAVAILABLE"
+
+
+def analyze_emergency_priority_corridor(
+    routes: List[RouteOption]
+) -> Dict[str, Any]:
+    """
+    Emergency Priority Corridor Intelligence:
+    Compares primary traffic-aware route against alternate corridors.
+    Detects congestion delays and calculates potential time savings from rerouting.
+    Data Honesty Guarantee: Does NOT pretend to manipulate public municipal traffic signals.
+    """
+    from app.schemas import EmergencyPriorityCorridorResponse
+    
+    if not routes:
+        return {
+            "status": "OPTIMAL_CORRIDOR_ACTIVE",
+            "current_corridor_name": "Standard Route",
+            "current_eta_minutes": 0.0,
+            "traffic_delay_minutes": 0.0,
+            "congestion_severity": "NORMAL",
+            "recommended_corridor": None,
+            "alternate_corridors": [],
+            "time_saved_minutes": 0.0,
+            "reason": "Single clear corridor active.",
+            "traffic_control_integration": "INFORMATIONAL_ROUTING_ONLY (No public municipal signal override)"
+        }
+        
+    primary_route = routes[0]
+    alternates = routes[1:] if len(routes) > 1 else []
+    
+    current_delay = primary_route.traffic_delay_minutes
+    congestion_sev = primary_route.congestion_level
+    
+    # Check if an alternate corridor saves time
+    fastest_alternate = None
+    time_saved = 0.0
+    
+    if alternates:
+        fastest_alternate = min(alternates, key=lambda r: r.adjusted_eta_minutes)
+        if fastest_alternate.adjusted_eta_minutes < primary_route.adjusted_eta_minutes:
+            time_saved = round(primary_route.adjusted_eta_minutes - fastest_alternate.adjusted_eta_minutes, 1)
+            
+    if time_saved > 2.0 and congestion_sev in ("HEAVY", "SEVERE"):
+        status = "REROUTE_RECOMMENDED"
+        recommended = fastest_alternate
+        reason = f"{congestion_sev} congestion on {primary_route.name} (+{current_delay:.1f}m delay). Recommended alternate corridor {recommended.name} saves ~{time_saved:.0f} minutes."
+    elif congestion_sev in ("HEAVY", "SEVERE"):
+        status = "CONGESTION_DETECTED"
+        recommended = primary_route
+        reason = f"Heavy traffic detected on {primary_route.name} (+{current_delay:.1f}m delay). Monitoring alternate corridors."
+    else:
+        status = "OPTIMAL_CORRIDOR_ACTIVE"
+        recommended = primary_route
+        reason = f"Clear priority corridor via {primary_route.name}. Traffic flow normal."
+        
+    return {
+        "status": status,
+        "current_corridor_name": primary_route.name,
+        "current_eta_minutes": primary_route.adjusted_eta_minutes,
+        "traffic_delay_minutes": current_delay,
+        "congestion_severity": congestion_sev,
+        "recommended_corridor": recommended or primary_route,
+        "alternate_corridors": alternates,
+        "time_saved_minutes": time_saved,
+        "reason": reason,
+        "traffic_control_integration": "INFORMATIONAL_ROUTING_ONLY (No public municipal signal override)"
+    }
+

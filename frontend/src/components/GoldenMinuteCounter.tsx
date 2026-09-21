@@ -35,21 +35,21 @@ export const GoldenMinuteCounter: React.FC<GoldenMinuteCounterProps> = ({
     switch (level) {
       case 'HIGH':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-500/40" title={confidence?.reasons?.join(', ') || 'High confidence based on live telemetry & routes'}>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-500/40" title={confidence?.known_factors?.join(', ') || confidence?.rationale || 'High confidence based on live telemetry & routes'}>
             <ShieldCheck className="h-3 w-3 text-emerald-400" />
             CONFIDENCE: HIGH
           </span>
         );
       case 'MEDIUM':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950/70 text-amber-400 border border-amber-500/40" title={confidence?.reasons?.join(', ') || 'Medium confidence'}>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950/70 text-amber-400 border border-amber-500/40" title={confidence?.known_factors?.join(', ') || confidence?.rationale || 'Medium confidence'}>
             <AlertTriangle className="h-3 w-3 text-amber-400" />
             CONFIDENCE: MEDIUM
           </span>
         );
       case 'LOW':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950/70 text-red-400 border border-red-500/40" title={confidence?.reasons?.join(', ') || 'Low confidence - missing signals'}>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950/70 text-red-400 border border-red-500/40" title={confidence?.unknown_factors?.join(', ') || confidence?.rationale || 'Low confidence - missing signals'}>
             <ShieldAlert className="h-3 w-3 text-red-400" />
             CONFIDENCE: LOW
           </span>

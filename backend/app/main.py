@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import Base, engine, SessionLocal
 from app.seed.demo_data import seed_database
-from app.api import health, emergencies, ambulances, hospitals, routes, demo, ai, data_status, location
+from app.api import health, emergencies, ambulances, hospitals, routes, demo, ai, data_status, location, dispatch, auth, analytics
+
+import sqlalchemy
 
 _db_initialized = False
 
@@ -13,6 +15,21 @@ def ensure_db():
     if not _db_initialized:
         try:
             Base.metadata.create_all(bind=engine)
+            # Safe schema auto-migration for SQLite / PostgreSQL missing columns
+            try:
+                with engine.connect() as conn:
+                    try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE drivers ADD COLUMN phone_verified BOOLEAN DEFAULT 0"))
+                        conn.commit()
+                    except Exception:
+                        pass
+                    try:
+                        conn.execute(sqlalchemy.text("ALTER TABLE drivers ADD COLUMN otp_verified_at DATETIME"))
+                        conn.commit()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
             db = SessionLocal()
             try:
                 seed_database(db, force_reset=False)
@@ -52,6 +69,9 @@ async def ensure_db_middleware(request, call_next):
 
 # Include Routers with /api prefix
 app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
+app.include_router(dispatch.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 app.include_router(location.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(data_status.router, prefix="/api")
@@ -63,6 +83,9 @@ app.include_router(demo.router, prefix="/api")
 
 # Also include Routers at root for direct serverless function path resolution
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(dispatch.router)
+app.include_router(analytics.router)
 app.include_router(location.router)
 app.include_router(ai.router)
 app.include_router(data_status.router)

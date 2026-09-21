@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import Base, engine, SessionLocal
 from app.seed.demo_data import seed_database
-from app.api import health, emergencies, ambulances, hospitals, routes, demo, ai, data_status, location
+from app.api import health, emergencies, ambulances, hospitals, routes, demo, ai, data_status, location, dispatch, auth, analytics
 
 _db_initialized = False
 
@@ -52,6 +52,9 @@ async def ensure_db_middleware(request, call_next):
 
 # Include Routers with /api prefix
 app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
+app.include_router(dispatch.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 app.include_router(location.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
 app.include_router(data_status.router, prefix="/api")
@@ -63,6 +66,9 @@ app.include_router(demo.router, prefix="/api")
 
 # Also include Routers at root for direct serverless function path resolution
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(dispatch.router)
+app.include_router(analytics.router)
 app.include_router(location.router)
 app.include_router(ai.router)
 app.include_router(data_status.router)

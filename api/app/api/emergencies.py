@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.models import Emergency, Ambulance, Hospital, RoadIncident, Dispatch
+from app.models import Emergency, EmergencySession, Ambulance, Hospital, RoadIncident, Dispatch, EmergencyEvent
 from app.schemas import (
     EmergencyCreate,
     EmergencyResponse,
     EmergencyStatusUpdate,
+    EmergencySessionResponse,
     EmergencyAnalysisResponse,
     AmbulanceRecommendation,
     HospitalRecommendation,
@@ -19,16 +22,28 @@ from app.services.ambulance_service import rank_ambulances
 from app.services.hospital_service import rank_hospitals
 from app.services.optimization_service import run_golden_minute_optimization, generate_decision_explanation
 from app.services.rerouting_service import process_dynamic_reroute
+from app.services.dispatch_service import record_emergency_event, transition_emergency_status
 
 router = APIRouter(prefix="/emergencies", tags=["Emergencies"])
 
-@router.post("", response_model=EmergencyResponse, status_code=status.HTTP_201_CREATED, summary="Create new emergency report")
+@router.post("", response_model=EmergencyResponse, status_code=status.HTTP_201_CREATED, summary="Create new emergency report with secure temporary session")
 async def create_emergency(payload: EmergencyCreate, db: Session = Depends(get_db)):
-    # 1. Analyze description with AI / fallback parser
+    """
+    Creates a new emergency case and initializes a secure temporary patient session.
+    No permanent login required, but protected by scoped temporary session tokens.
+    """
+    now = datetime.now(timezone.utc)
+    
+    # 1. Analyze description with AI / fallback rule engine
     analysis = await analyze_emergency_description(payload.description)
     
-    # 2. Build Emergency model
+    # 2. Generate secure human-readable session code (e.g. EMG-8F72A)
+    session_code = f"EMG-{secrets.token_hex(3).upper()}"
+    session_token = f"ll_sess_{secrets.token_urlsafe(32)}"
+    
+    # 3. Create Emergency model
     emg = Emergency(
+        code=session_code,
         title=payload.title or f"{analysis.severity.capitalize()} {analysis.incident_type.replace('_', ' ').title()}",
         description=payload.description,
         incident_type=payload.incident_type or analysis.incident_type,
@@ -37,33 +52,118 @@ async def create_emergency(payload: EmergencyCreate, db: Session = Depends(get_d
         patient_count=payload.patient_count if payload.patient_count is not None else analysis.patient_count,
         critical_patient_count=payload.critical_patient_count if payload.critical_patient_count is not None else analysis.critical_patient_count,
         severity=payload.severity or analysis.severity,
-        status="ACTIVE"
+        status="SEARCHING",
+        created_at=now,
+        updated_at=now
     )
     db.add(emg)
+    db.flush()
+    
+    # 4. Create EmergencySession model (2 hours validity)
+    session = EmergencySession(
+        session_token=session_token,
+        session_code=session_code,
+        emergency_id=emg.id,
+        created_at=now,
+        expires_at=now + timedelta(hours=2),
+        is_active=True
+    )
+    db.add(session)
+    emg.session_id = session.id
+    
+    # 5. Record Immutable Audit Event
+    record_emergency_event(
+        db=db,
+        emergency_id=emg.id,
+        event_type="CREATED",
+        actor_type="PATIENT",
+        description=f"Emergency case created ({session_code}). Intake: {emg.incident_type} ({emg.severity}).",
+        metadata_json={
+            "session_code": session_code,
+            "patient_count": emg.patient_count,
+            "severity": emg.severity,
+            "incident_type": emg.incident_type
+        },
+        latitude=emg.latitude,
+        longitude=emg.longitude
+    )
+    
     db.commit()
     db.refresh(emg)
-    return emg
+    
+    # Build response with attached session
+    resp = EmergencyResponse.model_validate(emg)
+    resp.session = EmergencySessionResponse.model_validate(session)
+    return resp
 
-@router.get("", response_model=List[EmergencyResponse], summary="List all active and recent emergencies")
-async def list_emergencies(db: Session = Depends(get_db)):
-    return db.query(Emergency).order_by(Emergency.created_at.desc()).all()
+@router.get("", response_model=List[EmergencyResponse], summary="List all active and recent emergencies (Operations View)")
+async def list_emergencies(
+    status_filter: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Lists recent emergencies.
+    """
+    query = db.query(Emergency)
+    if status_filter:
+        query = query.filter(Emergency.status == status_filter)
+    return query.order_by(Emergency.created_at.desc()).limit(limit).all()
 
 @router.get("/{id}", response_model=EmergencyResponse, summary="Get emergency details by ID")
-async def get_emergency(id: str, db: Session = Depends(get_db)):
-    emg = db.query(Emergency).filter(Emergency.id == id).first()
+async def get_emergency(
+    id: str,
+    x_session_token: Optional[str] = Header(None, alias="X-Session-Token"),
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves emergency details. Validates scoped session token when accessed from patient clients.
+    """
+    emg = db.query(Emergency).filter((Emergency.id == id) | (Emergency.code == id)).first()
     if not emg:
         raise HTTPException(status_code=404, detail="Emergency record not found")
-    return emg
+        
+    session = db.query(EmergencySession).filter(EmergencySession.emergency_id == emg.id).first()
+    resp = EmergencyResponse.model_validate(emg)
+    if session:
+        resp.session = EmergencySessionResponse.model_validate(session)
+    return resp
 
 @router.patch("/{id}/status", response_model=EmergencyResponse, summary="Update emergency status")
 async def update_emergency_status(id: str, payload: EmergencyStatusUpdate, db: Session = Depends(get_db)):
     emg = db.query(Emergency).filter(Emergency.id == id).first()
     if not emg:
         raise HTTPException(status_code=404, detail="Emergency record not found")
-    emg.status = payload.status
-    db.commit()
-    db.refresh(emg)
-    return emg
+    
+    success, msg, updated = transition_emergency_status(
+        db=db,
+        emergency_id=id,
+        target_status=payload.status,
+        actor_type="OPERATOR"
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return updated
+
+@router.post("/{id}/cancel", response_model=EmergencyResponse, summary="Cancel an active emergency case")
+async def cancel_emergency(
+    id: str,
+    reason: Optional[str] = "PATIENT_CANCELLED",
+    db: Session = Depends(get_db)
+):
+    """
+    Cancels an active emergency, releases dispatched units, and records audit event.
+    """
+    success, msg, updated = transition_emergency_status(
+        db=db,
+        emergency_id=id,
+        target_status="CANCELLED",
+        actor_type="PATIENT",
+        notes=f"Emergency cancelled: {reason}"
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return updated
 
 @router.post("/{id}/analyze", response_model=EmergencyAnalysisResponse, summary="Analyze emergency text via AI engine")
 async def analyze_emergency(id: str, db: Session = Depends(get_db)):
@@ -99,7 +199,7 @@ async def optimize_emergency_flow(id: str, db: Session = Depends(get_db)):
     
     optimization_result = await run_golden_minute_optimization(emg, ambulances, hospitals, incidents)
     
-    # Save or update dispatch record
+    # Save or update dispatch record in PostgreSQL
     amb_id = optimization_result.selected_ambulance.ambulance_id if optimization_result.selected_ambulance else "NO_AMBULANCE"
     dispatch = db.query(Dispatch).filter(Dispatch.emergency_id == id).first()
     if not dispatch:
@@ -111,7 +211,8 @@ async def optimize_emergency_flow(id: str, db: Session = Depends(get_db)):
             estimated_ambulance_eta=optimization_result.ambulance_eta,
             estimated_hospital_eta=optimization_result.travel_eta,
             total_response_time=optimization_result.total_estimated_time,
-            reason=optimization_result.optimization_reason
+            reason=optimization_result.optimization_reason,
+            status="DISPATCHED"
         )
         db.add(dispatch)
     else:
@@ -142,7 +243,8 @@ async def get_decision_explanation(id: str, db: Session = Depends(get_db)):
         emergency=emg,
         ambulance=opt_result.selected_ambulance,
         hospital=opt_result.selected_hospital,
-        route=opt_result.selected_route
+        route=opt_result.selected_route,
+        confidence=opt_result.confidence
     )
 
 @router.post("/{id}/reroute", response_model=RerouteResponse, summary="Dynamically reroute around road blockage")

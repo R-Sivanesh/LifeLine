@@ -1,6 +1,6 @@
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getDatabase, ref, set, onValue, Database } from 'firebase/database';
-import { LiveAmbulanceGPS, LiveAmbulanceStatus } from '../types';
+import { initializeApp, getApps } from 'firebase/app';
+import { getDatabase, ref, set, onValue } from 'firebase/database';
+import { LiveAmbulanceGPS, LiveAmbulanceStatus, DriverAlertItem } from '../types';
 import { lifelineApi } from './api';
 
 // Firebase Client Configuration
@@ -27,7 +27,7 @@ try {
     }
   }
 } catch (e) {
-  console.warn('Firebase initialization note (using REST/WebSocket synchronization fallback):', e);
+  console.warn('Firebase initialization note (using REST synchronization fallback):', e);
 }
 
 /**
@@ -40,7 +40,6 @@ export function getAmbulanceFreshness(updatedAt: number): {
   ageSeconds: number;
 } {
   const now = Date.now();
-  // Normalize timestamp if in seconds
   const tsMs = updatedAt < 1e11 ? updatedAt * 1000 : updatedAt;
   const ageSeconds = Math.max(0, Math.round((now - tsMs) / 1000));
 
@@ -82,6 +81,8 @@ export async function publishAmbulanceGPS(telemetry: {
   speed?: number | null;
   heading?: number | null;
   accuracy?: number | null;
+  driver_id?: string;
+  driver_name?: string;
 }): Promise<void> {
   const now = Date.now();
   const payload: LiveAmbulanceGPS = {
@@ -96,7 +97,9 @@ export async function publishAmbulanceGPS(telemetry: {
     accuracy: telemetry.accuracy ?? null,
     updated_at: now,
     source: 'LIVE_GPS',
-    freshness_status: 'LIVE'
+    freshness_status: 'LIVE',
+    driver_id: telemetry.driver_id,
+    driver_name: telemetry.driver_name
   };
 
   // 1. Write to Firebase RTDB if configured
@@ -118,8 +121,7 @@ export async function publishAmbulanceGPS(telemetry: {
 }
 
 /**
- * Subscribes to real-time ambulance updates via Firebase Realtime Database listener
- * and periodic polling synchronization.
+ * Subscribes to real-time ambulance fleet updates via Firebase Realtime Database
  */
 export function subscribeToAmbulanceUpdates(
   callback: (ambulances: LiveAmbulanceGPS[]) => void
@@ -127,7 +129,6 @@ export function subscribeToAmbulanceUpdates(
   let isMounted = true;
   let unsubscribeFirebase: (() => void) | null = null;
 
-  // 1. Firebase Realtime Database Listener
   if (db && isFirebaseConfigured) {
     try {
       const ambulancesRef = ref(db, 'ambulances');
@@ -152,7 +153,6 @@ export function subscribeToAmbulanceUpdates(
     }
   }
 
-  // 2. Continuous Backend Polling Fallback (every 3 seconds) for cross-device reliability
   const pollBackend = async () => {
     if (!isMounted) return;
     try {
@@ -168,7 +168,7 @@ export function subscribeToAmbulanceUpdates(
         callback(enriched);
       }
     } catch (e) {
-      // Backend poll error
+      // Backend poll fallback
     }
   };
 
@@ -180,4 +180,75 @@ export function subscribeToAmbulanceUpdates(
     if (unsubscribeFirebase) unsubscribeFirebase();
     clearInterval(intervalId);
   };
+}
+
+/**
+ * Subscribes to real-time dispatch alerts for a specific driver.
+ * Triggers full-screen alert whenever a new dispatch alert is assigned to this driver.
+ */
+export function subscribeToDriverAlerts(
+  driverId: string,
+  onAlert: (alert: DriverAlertItem | null) => void
+): () => void {
+  let isMounted = true;
+  let unsubscribeFirebase: (() => void) | null = null;
+
+  if (db && isFirebaseConfigured) {
+    try {
+      const alertsRef = ref(db, `driver_alerts/${driverId}`);
+      unsubscribeFirebase = onValue(alertsRef, (snapshot: any) => {
+        if (!isMounted) return;
+        const val = snapshot.val();
+        if (val) {
+          const pending = Object.values(val).find((a: any) => a.status === 'PENDING') as DriverAlertItem;
+          onAlert(pending || null);
+        } else {
+          onAlert(null);
+        }
+      });
+    } catch (e) {
+      console.warn('Firebase driver alerts error:', e);
+    }
+  }
+
+  const pollAlerts = async () => {
+    if (!isMounted || !driverId) return;
+    try {
+      const alerts = await lifelineApi.getDriverAlerts(driverId);
+      if (alerts && alerts.length > 0) {
+        const pending = alerts.find((a) => a.status === 'PENDING');
+        onAlert(pending || null);
+      } else {
+        onAlert(null);
+      }
+    } catch (e) {
+      // Ignore polling errors
+    }
+  };
+
+  pollAlerts();
+  const intervalId = setInterval(pollAlerts, 2500);
+
+  return () => {
+    isMounted = false;
+    if (unsubscribeFirebase) unsubscribeFirebase();
+    clearInterval(intervalId);
+  };
+}
+
+/**
+ * Publishes an incoming emergency dispatch alert into Firebase RTDB for a driver.
+ */
+export async function publishDriverAlertToFirebase(
+  driverId: string,
+  alert: DriverAlertItem
+): Promise<void> {
+  if (db && isFirebaseConfigured) {
+    try {
+      const alertRef = ref(db, `driver_alerts/${driverId}/${alert.emergency_id}`);
+      await set(alertRef, alert);
+    } catch (e) {
+      console.warn('Failed to write driver alert to Firebase:', e);
+    }
+  }
 }
