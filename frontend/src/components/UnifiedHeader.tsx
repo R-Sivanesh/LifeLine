@@ -24,7 +24,7 @@ export const UnifiedHeader: React.FC = () => {
   };
 
   const getRoleMeta = () => {
-    if (!user) return { title: 'Emergency Response', badge: 'PUBLIC', color: 'text-red-400' };
+    if (!user) return { title: 'Emergency Response', badge: 'PUBLIC', badgeClass: 'bg-zinc-900 text-zinc-400 border-zinc-700', color: 'text-red-400' };
     switch (user.role) {
       case 'DRIVER':
         return {

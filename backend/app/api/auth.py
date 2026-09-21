@@ -262,6 +262,7 @@ async def driver_google_login(payload: DriverGoogleAuthRequest, db: Session = De
             if otp_service.is_phone_verified(payload.phone):
                 driver.phone_verified = True
                 driver.otp_verified_at = now
+        driver.status = "AVAILABLE"
         driver.last_active_at = now
         db.commit()
         db.refresh(driver)

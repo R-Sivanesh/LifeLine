@@ -22,24 +22,28 @@ import {
 } from 'lucide-react';
 
 export const HospitalPortalPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [emergencies, setEmergencies] = useState<Emergency[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [selectedHospitalName] = useState<string>('Chromepet General Emergency Department');
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   const fetchInboundEmergencies = async () => {
     setIsLoading(true);
+    setApiError(null);
     try {
       const all = await lifelineApi.listEmergencies();
       // Filter for active/transporting/dispatched cases
-      const inbound = all.filter((e) =>
+      const inbound = (all || []).filter((e) =>
         ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PATIENT_ONBOARD', 'TRANSPORTING'].includes(e.status)
       );
-      setEmergencies(inbound.length > 0 ? inbound : all.slice(0, 3));
+      setEmergencies(inbound.length > 0 ? inbound : (all || []).slice(0, 3));
       setLastRefreshed(new Date());
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to load inbound emergencies:', e);
+      setApiError('Unable to refresh inbound emergency feed. Telemetry sync is retrying...');
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +71,7 @@ export const HospitalPortalPage: React.FC = () => {
           </div>
           <div className="text-zinc-300 text-[11px] pt-1 grid grid-cols-2 gap-x-4 gap-y-1">
             <div>Hospital: <span className="font-bold text-white">LifeLine Demo Hospital</span></div>
-            <div>Staff: <span className="font-bold text-white">{user.name}</span> (Demo ER Staff)</div>
+            <div>Staff: <span className="font-bold text-white">{user?.name || 'Demo ER Staff'}</span> (Demo ER Staff)</div>
             <div>ER Status: <span className="font-bold text-emerald-400">ACCEPTING INBOUND PATIENTS</span></div>
             <div>Data Stream: <span className="font-bold text-amber-300">DEMO TRIAGE STREAM</span></div>
           </div>
@@ -98,26 +102,53 @@ export const HospitalPortalPage: React.FC = () => {
         </div>
 
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
-          <div>
+          <div className="truncate pr-2">
             <div className="text-xs font-mono text-zinc-400">
               {user?.is_demo ? 'DEMO ER STAFF' : 'AUTHENTICATED STAFF'}
             </div>
-            <div className="text-sm font-bold text-white mt-1">
+            <div className="text-sm font-bold text-white mt-1 truncate">
               {user?.name || (user?.is_demo ? 'Demo ER Staff' : 'Dr. Radhika Srinivasan')}
             </div>
             <div className="text-[11px] text-zinc-400 font-mono">
               {user?.phone || (user?.is_demo ? '+91 98840 00003' : '+91 98402 34567')}
             </div>
           </div>
-          <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
-            user?.is_demo
-              ? 'bg-amber-950 border border-amber-500/50 text-amber-300'
-              : 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
-          }`}>
-            ER
+          <div className="flex items-center gap-2">
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
+              user?.is_demo
+                ? 'bg-amber-950 border border-amber-500/50 text-amber-300'
+                : 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
+            }`}>
+              ER
+            </div>
+            <button
+              onClick={() => {
+                logout();
+                navigate('/');
+              }}
+              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all text-xs"
+              title="Sign Out"
+            >
+              Sign Out
+            </button>
           </div>
         </div>
       </div>
+
+      {apiError && (
+        <div className="p-3 bg-amber-950/70 border border-amber-500/40 rounded-xl text-xs text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+            <span>{apiError}</span>
+          </div>
+          <button
+            onClick={fetchInboundEmergencies}
+            className="px-2.5 py-1 rounded bg-amber-900 hover:bg-amber-800 text-amber-200 font-bold text-xs"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Inbound Ambulances Feed */}
       <div className="space-y-4">
@@ -142,9 +173,9 @@ export const HospitalPortalPage: React.FC = () => {
         {emergencies.length === 0 ? (
           <div className="p-8 rounded-2xl bg-zinc-900/60 border border-zinc-800 text-center space-y-2">
             <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
-            <div className="font-bold text-white">No Inbound Emergencies at this Moment</div>
-            <p className="text-xs text-zinc-400">
-              Incoming ambulance dispatches will automatically appear here with live ETA and triage details.
+            <div className="font-bold text-white text-base">No inbound ambulances currently.</div>
+            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+              Incoming ambulance dispatches and inbound patient transfers will automatically appear here with live ETA and triage details.
             </p>
           </div>
         ) : (

@@ -87,11 +87,9 @@ export const AuthRoleSelectorModal: React.FC<AuthRoleSelectorModalProps> = ({
     };
   }, [cooldown]);
 
-  if (!isOpen) return null;
-
+  // Check backend demo status
   const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
 
-  // Check backend demo status
   useEffect(() => {
     lifelineApi.getDemoStatus().then((res) => {
       setIsDemoMode(res.demo_mode);
@@ -99,6 +97,8 @@ export const AuthRoleSelectorModal: React.FC<AuthRoleSelectorModalProps> = ({
       setIsDemoMode(true);
     });
   }, []);
+
+  if (!isOpen) return null;
 
   const handleDemoLogin = async (role: UserRole, demoId: string) => {
     setIsSubmitting(true);

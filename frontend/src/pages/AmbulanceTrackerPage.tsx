@@ -44,7 +44,7 @@ import { useAuth } from '../context/AuthContext';
 
 export const AmbulanceTrackerPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user: authUser, login: authLogin } = useAuth();
+  const { user: authUser, login: authLogin, logout: authLogout } = useAuth();
 
   // Authentication & Driver Profile
   const [driver, setDriver] = useState<Driver | null>(authUser);
@@ -516,8 +516,37 @@ export const AmbulanceTrackerPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            <button
+              onClick={() => {
+                authLogout();
+                navigate('/');
+              }}
+              className="p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700 text-xs flex items-center gap-1.5 transition-all"
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline font-mono font-bold">Sign Out</span>
+            </button>
           </div>
         </div>
+
+        {/* ── IDLE / STANDING BY EMPTY STATE ── */}
+        {!activeEmergency && (
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl p-5 text-center space-y-3">
+            <div className="h-12 w-12 rounded-2xl bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mx-auto">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-bold text-white">
+                No active emergency requests.
+              </div>
+              <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                Your ambulance is available. Incoming emergency dispatches will appear here automatically with audio alert.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── ACTIVE EMERGENCY ASSIGNMENT NAVIGATION VIEW ── */}
         {activeEmergency && activeOptimization && (

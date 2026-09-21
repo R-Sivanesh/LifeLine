@@ -47,6 +47,7 @@ async def driver_google_login(payload: DriverGoogleAuthRequest, db: Session = De
             driver.google_id = payload.google_id
         if payload.ambulance_id:
             driver.assigned_ambulance_id = payload.ambulance_id
+        driver.status = "AVAILABLE"
         driver.last_active_at = now
         db.commit()
         db.refresh(driver)
