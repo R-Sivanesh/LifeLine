@@ -85,22 +85,41 @@ export const AmbulanceTrackerPage: React.FC = () => {
   const [lifecycleStage, setLifecycleStage] = useState<string>('AVAILABLE');
 
   const watchIdRef = useRef<number | null>(null);
+  const simIntervalRef = useRef<any>(null);
   const lastPublishedTimeRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const MIN_UPDATE_INTERVAL_MS = 4000;
+  const MIN_UPDATE_INTERVAL_MS = 3000;
+
+  // Sync auth state
+  useEffect(() => {
+    if (authUser) {
+      setDriver(authUser);
+      if (authUser.assigned_ambulance_id) {
+        setAmbulanceId(authUser.assigned_ambulance_id);
+      }
+      if (authUser.is_demo) {
+        setVehicleName(
+          authUser.assigned_ambulance_id === 'amb-demo-001' ? 'LL-DEMO-AMB-001' :
+          authUser.assigned_ambulance_id === 'amb-demo-002' ? 'LL-DEMO-AMB-002' : 'LL-DEMO-AMB'
+        );
+        if (authUser.latitude && authUser.longitude) {
+          setLatitude(authUser.latitude);
+          setLongitude(authUser.longitude);
+        }
+      }
+    }
+  }, [authUser]);
 
   // Real-time age ticker
   useEffect(() => {
     const interval = setInterval(() => {
       if (lastUpdatedTimestamp) {
-        const fresh = getAmbulanceFreshness(lastUpdatedTimestamp);
+        const fresh = getAmbulanceFreshness(lastUpdatedTimestamp, Boolean(driver?.is_demo));
         setAgeDisplay(fresh.text);
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [lastUpdatedTimestamp]);
-
-
+  }, [lastUpdatedTimestamp, driver]);
 
   // Play audio chime when emergency alert arrives
   const playAlertChime = () => {
@@ -146,13 +165,14 @@ export const AmbulanceTrackerPage: React.FC = () => {
 
   // Transmit location update
   const transmitLocation = useCallback(
-    async (coords: GeolocationCoordinates) => {
+    async (coords: { latitude: number; longitude: number; speed?: number | null; heading?: number | null; accuracy?: number | null }) => {
       const now = Date.now();
+      const isDemo = Boolean(driver?.is_demo);
       setLatitude(coords.latitude);
       setLongitude(coords.longitude);
-      setAccuracy(coords.accuracy);
-      setSpeed(coords.speed !== null ? Math.round(coords.speed * 3.6) : 0);
-      setHeading(coords.heading !== null ? Math.round(coords.heading) : 0);
+      setAccuracy(coords.accuracy ?? (isDemo ? 5.0 : null));
+      setSpeed(coords.speed !== null && coords.speed !== undefined ? Math.round(coords.speed * 3.6) : (isDemo ? 42 : 0));
+      setHeading(coords.heading !== null && coords.heading !== undefined ? Math.round(coords.heading) : (isDemo ? 90 : 0));
       setLastUpdatedTimestamp(now);
       setGpsStatus('CONNECTED');
       setGpsError(null);
@@ -167,9 +187,13 @@ export const AmbulanceTrackerPage: React.FC = () => {
             status,
             latitude: coords.latitude,
             longitude: coords.longitude,
-            speed: coords.speed !== null ? Math.round(coords.speed * 3.6) : null,
-            heading: coords.heading !== null ? Math.round(coords.heading) : null,
-            accuracy: coords.accuracy,
+            speed: coords.speed !== null && coords.speed !== undefined ? Math.round(coords.speed * 3.6) : (isDemo ? 42 : null),
+            heading: coords.heading !== null && coords.heading !== undefined ? Math.round(coords.heading) : (isDemo ? 90 : null),
+            accuracy: coords.accuracy ?? (isDemo ? 5.0 : null),
+            source: isDemo ? 'DEMO_TELEMETRY' : 'LIVE_GPS',
+            freshness_status: isDemo ? 'DEMO' : 'LIVE',
+            is_demo: isDemo,
+            demo_type: driver?.demo_type,
             driver_id: driver?.id,
             driver_name: driver?.name
           });
@@ -182,8 +206,69 @@ export const AmbulanceTrackerPage: React.FC = () => {
     [ambulanceId, vehicleName, capability, status, driver]
   );
 
-  // Start Live Tracking Watcher
+  // Start Live Tracking Watcher or Demo GPS Simulation
   const handleStartTracking = () => {
+    setIsTracking(true);
+    setGpsError(null);
+
+    if (driver?.is_demo) {
+      // DEMO MODE: Smooth coordinate simulation (no GPS hardware requirement)
+      setGpsStatus('CONNECTED');
+      let currentLat = latitude || (driver.assigned_ambulance_id === 'amb-demo-001' ? 13.0080 : 13.0120);
+      let currentLng = longitude || (driver.assigned_ambulance_id === 'amb-demo-001' ? 80.2015 : 80.2150);
+      let stepAngle = 0;
+
+      // Immediately transmit initial point
+      transmitLocation({
+        latitude: currentLat,
+        longitude: currentLng,
+        speed: 12.0,
+        heading: 45,
+        accuracy: 4.5
+      });
+
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+      simIntervalRef.current = setInterval(() => {
+        stepAngle += 0.15;
+        // Smooth progression towards target if active emergency exists, else smooth cruise
+        let targetLat = currentLat;
+        let targetLng = currentLng;
+
+        if (activeEmergency && activeOptimization) {
+          if (lifecycleStage === 'EN_ROUTE') {
+            targetLat = activeEmergency.latitude;
+            targetLng = activeEmergency.longitude;
+          } else if (lifecycleStage === 'TRANSPORTING') {
+            targetLat = activeOptimization.selected_hospital.latitude;
+            targetLng = activeOptimization.selected_hospital.longitude;
+          }
+          const dLat = targetLat - currentLat;
+          const dLng = targetLng - currentLng;
+          const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+          if (dist > 0.0005) {
+            currentLat += (dLat / dist) * 0.0003;
+            currentLng += (dLng / dist) * 0.0003;
+          }
+        } else {
+          // Idle realistic micro-movement along local road
+          currentLat += Math.sin(stepAngle) * 0.00015;
+          currentLng += Math.cos(stepAngle) * 0.00015;
+        }
+
+        const calculatedHeading = Math.round((stepAngle * 57.2958) % 360);
+        transmitLocation({
+          latitude: currentLat,
+          longitude: currentLng,
+          speed: 11.5 + Math.sin(stepAngle) * 2.0,
+          heading: calculatedHeading,
+          accuracy: 5.0
+        });
+      }, 2000);
+
+      return;
+    }
+
+    // REAL MODE: Use device GPS
     if (!navigator.geolocation) {
       setGpsStatus('UNAVAILABLE');
       setGpsError('Geolocation is not supported by your mobile browser.');
@@ -191,8 +276,6 @@ export const AmbulanceTrackerPage: React.FC = () => {
     }
 
     setGpsStatus('ACQUIRING');
-    setGpsError(null);
-    setIsTracking(true);
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -221,11 +304,15 @@ export const AmbulanceTrackerPage: React.FC = () => {
     watchIdRef.current = watchId;
   };
 
-  // Stop Live Tracking Watcher
+  // Stop Live Tracking Watcher or Simulation
   const handleStopTracking = async () => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
+    }
+    if (simIntervalRef.current !== null) {
+      clearInterval(simIntervalRef.current);
+      simIntervalRef.current = null;
     }
     setIsTracking(false);
     setGpsStatus('IDLE');
@@ -241,7 +328,9 @@ export const AmbulanceTrackerPage: React.FC = () => {
           longitude,
           speed: 0,
           heading: 0,
-          accuracy
+          accuracy,
+          is_demo: Boolean(driver?.is_demo),
+          demo_type: driver?.demo_type
         });
       } catch (e) {
         // Ignore
@@ -254,6 +343,9 @@ export const AmbulanceTrackerPage: React.FC = () => {
     return () => {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      if (simIntervalRef.current !== null) {
+        clearInterval(simIntervalRef.current);
       }
     };
   }, []);
@@ -374,6 +466,27 @@ export const AmbulanceTrackerPage: React.FC = () => {
   return (
     <div className="w-full max-w-lg mx-auto p-4 sm:p-6 space-y-6">
 
+        {/* ── DEMO MODE BANNER ── */}
+        {driver?.is_demo && (
+          <div className="bg-gradient-to-r from-amber-950/90 via-zinc-900 to-amber-950/90 border-2 border-amber-500/80 rounded-2xl p-4 shadow-xl text-amber-200 text-xs font-mono space-y-2 animate-fadeIn card-glow-amber">
+            <div className="flex items-center justify-between font-black text-xs sm:text-sm text-amber-400">
+              <span className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-ping" />
+                🟠 DEMO MODE — AMBULANCE DRIVER
+              </span>
+              <span className="px-2 py-0.5 rounded bg-amber-900 border border-amber-500/50 text-[10px] tracking-wider uppercase font-bold">
+                ISOLATED DEMO
+              </span>
+            </div>
+            <div className="text-zinc-300 text-[11px] pt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+              <div>Driver: <span className="font-bold text-white">{driver.name}</span></div>
+              <div>Ambulance: <span className="font-bold text-white">{ambulanceId}</span> ({vehicleName})</div>
+              <div>Telemetry: <span className="font-bold text-amber-300">DEMO TELEMETRY / SIMULATED</span></div>
+              <div>Status: <span className="font-bold text-emerald-400">{status}</span></div>
+            </div>
+          </div>
+        )}
+
         {/* Driver Profile Header */}
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-5 shadow-2xl space-y-3">
           <div className="flex items-center justify-between">
@@ -390,8 +503,12 @@ export const AmbulanceTrackerPage: React.FC = () => {
                   <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">
                     {driver ? driver.name : 'DRIVER CONSOLE'}
                   </h1>
-                  <span className="text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.5 rounded">
-                    VERIFIED
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                    driver?.is_demo
+                      ? 'bg-amber-950 text-amber-300 border border-amber-500/40'
+                      : 'bg-cyan-950 text-cyan-300 border border-cyan-500/40'
+                  }`}>
+                    {driver?.is_demo ? 'DEMO DRIVER' : 'VERIFIED'}
                   </span>
                 </div>
                 <div className="text-xs font-mono text-zinc-400">
@@ -411,6 +528,11 @@ export const AmbulanceTrackerPage: React.FC = () => {
                 <span className="text-xs font-mono font-black text-red-400 uppercase tracking-wider">
                   ACTIVE MISSION: {activeEmergency.code || activeEmergency.id.slice(0, 8)}
                 </span>
+                {activeEmergency.is_demo && (
+                  <span className="text-[10px] font-mono bg-amber-950 text-amber-400 border border-amber-500/50 px-1.5 py-0.5 rounded font-bold">
+                    DEMO
+                  </span>
+                )}
               </div>
               <span className="text-xs font-mono bg-red-950 text-red-300 border border-red-500/50 px-2 py-0.5 rounded font-bold">
                 {lifecycleStage}
@@ -532,10 +654,14 @@ export const AmbulanceTrackerPage: React.FC = () => {
           {!isTracking ? (
             <button
               onClick={handleStartTracking}
-              className="w-full py-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 shadow-2xl shadow-emerald-600/30 border border-emerald-400 transition-all active:scale-[0.98]"
+              className={`w-full py-5 rounded-2xl bg-gradient-to-r ${
+                driver?.is_demo
+                  ? 'from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 active:from-amber-800 active:to-amber-900 border-amber-400 shadow-amber-600/30'
+                  : 'from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 border-emerald-400 shadow-emerald-600/30'
+              } text-white font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 shadow-2xl border transition-all active:scale-[0.98]`}
             >
               <Play className="h-6 w-6 fill-white" />
-              <span>START CONTINUOUS GPS TRACKING</span>
+              <span>{driver?.is_demo ? 'START DEMO GPS SIMULATION' : 'START CONTINUOUS GPS TRACKING'}</span>
             </button>
           ) : (
             <button
@@ -543,7 +669,7 @@ export const AmbulanceTrackerPage: React.FC = () => {
               className="w-full py-5 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:from-red-700 active:to-rose-700 text-white font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 shadow-2xl shadow-red-600/40 border border-red-400 transition-all active:scale-[0.98]"
             >
               <Square className="h-6 w-6 fill-white" />
-              <span>STOP LIVE GPS</span>
+              <span>{driver?.is_demo ? 'STOP DEMO GPS SIMULATION' : 'STOP LIVE GPS'}</span>
             </button>
           )}
 
@@ -559,20 +685,26 @@ export const AmbulanceTrackerPage: React.FC = () => {
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl space-y-4 font-mono">
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
             <span className="text-xs text-zinc-400 font-bold uppercase flex items-center gap-2">
-              <Radio className={`h-4 w-4 ${isTracking ? 'text-emerald-400 animate-pulse' : 'text-zinc-500'}`} />
-              <span>GPS Telemetry Pool</span>
+              <Radio className={`h-4 w-4 ${
+                isTracking
+                  ? (driver?.is_demo ? 'text-amber-400 animate-pulse' : 'text-emerald-400 animate-pulse')
+                  : 'text-zinc-500'
+              }`} />
+              <span>{driver?.is_demo ? 'Simulated Telemetry Pool' : 'GPS Telemetry Pool'}</span>
             </span>
             <span
               className={`text-xs px-2.5 py-0.5 rounded-full border font-bold ${
                 gpsStatus === 'CONNECTED'
-                  ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                  ? (driver?.is_demo
+                      ? 'bg-amber-950 text-amber-300 border-amber-500/50'
+                      : 'bg-emerald-950 text-emerald-300 border-emerald-500/50')
                   : gpsStatus === 'ACQUIRING'
                   ? 'bg-amber-950 text-amber-300 border-amber-500/50 animate-pulse'
                   : 'bg-zinc-950 text-zinc-500 border-zinc-800'
               }`}
             >
               {gpsStatus === 'CONNECTED'
-                ? 'LIVE BROADCASTING'
+                ? (driver?.is_demo ? '🟠 DEMO TELEMETRY' : 'LIVE BROADCASTING')
                 : gpsStatus === 'ACQUIRING'
                 ? 'ACQUIRING SATELLITES...'
                 : 'OFFLINE / STANDBY'}

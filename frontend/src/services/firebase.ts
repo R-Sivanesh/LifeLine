@@ -33,8 +33,8 @@ try {
 /**
  * Calculates freshness category and display text for GPS coordinates
  */
-export function getAmbulanceFreshness(updatedAt: number): {
-  status: 'LIVE' | 'STALE' | 'OFFLINE';
+export function getAmbulanceFreshness(updatedAt: number, isDemo?: boolean): {
+  status: 'LIVE' | 'STALE' | 'OFFLINE' | 'DEMO';
   text: string;
   badgeClass: string;
   ageSeconds: number;
@@ -42,6 +42,15 @@ export function getAmbulanceFreshness(updatedAt: number): {
   const now = Date.now();
   const tsMs = updatedAt < 1e11 ? updatedAt * 1000 : updatedAt;
   const ageSeconds = Math.max(0, Math.round((now - tsMs) / 1000));
+
+  if (isDemo) {
+    return {
+      status: 'DEMO',
+      text: `🟠 DEMO TELEMETRY • Simulated (${ageSeconds <= 1 ? 'just now' : `${ageSeconds}s ago`})`,
+      badgeClass: 'bg-amber-950 text-amber-300 border-amber-500/50',
+      ageSeconds
+    };
+  }
 
   if (ageSeconds <= 30) {
     return {
@@ -81,13 +90,18 @@ export async function publishAmbulanceGPS(telemetry: {
   speed?: number | null;
   heading?: number | null;
   accuracy?: number | null;
+  source?: 'LIVE_GPS' | 'DEMO_TELEMETRY' | string;
+  freshness_status?: 'LIVE' | 'STALE' | 'OFFLINE' | 'DEMO' | string;
+  is_demo?: boolean;
+  demo_type?: string;
   driver_id?: string;
   driver_name?: string;
 }): Promise<void> {
   const now = Date.now();
+  const isDemo = Boolean(telemetry.is_demo);
   const payload: LiveAmbulanceGPS = {
     id: telemetry.id,
-    vehicle_number: telemetry.vehicle_number || `${telemetry.id} (Live GPS)`,
+    vehicle_number: telemetry.vehicle_number || `${telemetry.id} (${isDemo ? 'Demo Telemetry' : 'Live GPS'})`,
     capability: telemetry.capability || 'ADVANCED',
     status: telemetry.status,
     latitude: telemetry.latitude,
@@ -96,8 +110,10 @@ export async function publishAmbulanceGPS(telemetry: {
     heading: telemetry.heading ?? null,
     accuracy: telemetry.accuracy ?? null,
     updated_at: now,
-    source: 'LIVE_GPS',
-    freshness_status: 'LIVE',
+    source: telemetry.source || (isDemo ? 'DEMO_TELEMETRY' : 'LIVE_GPS'),
+    freshness_status: telemetry.freshness_status || (isDemo ? 'DEMO' : 'LIVE'),
+    is_demo: isDemo,
+    demo_type: telemetry.demo_type,
     driver_id: telemetry.driver_id,
     driver_name: telemetry.driver_name
   };

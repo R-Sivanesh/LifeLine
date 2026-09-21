@@ -2,6 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+from app.config import settings
 from app.database import get_db
 from app.models import RoadIncident, Emergency, Ambulance, Hospital, Dispatch, RouteEvent
 from app.seed.demo_data import seed_database
@@ -9,15 +10,25 @@ from app.schemas import EmergencyResponse
 
 router = APIRouter(prefix="/demo", tags=["Demo & Simulation"])
 
-@router.post("/reset", summary="Reset and reseed demo environment")
+@router.post("/reset", summary="Reset and reseed demo environment safely")
 async def reset_demo(db: Session = Depends(get_db)):
-    seed_database(db, force_reset=True)
+    """
+    Safely resets demo accounts and simulated emergency cases.
+    NEVER deletes real user profiles or production operational records.
+    """
+    if not settings.DEMO_MODE:
+        raise HTTPException(
+            status_code=403,
+            detail="Demo reset is disabled when DEMO_MODE=false."
+        )
+
+    seed_database(db, force_reset=False, reset_only_demo=True)
     return {
         "status": "success",
-        "message": "Demo database successfully reset and re-seeded with Chennai scenario dataset.",
-        "ambulances_count": db.query(Ambulance).count(),
-        "hospitals_count": db.query(Hospital).count(),
-        "incidents_count": db.query(RoadIncident).count()
+        "message": "Demo state successfully reset. Real operational records remain untouched.",
+        "demo_ambulances_count": db.query(Ambulance).filter(Ambulance.is_demo == True).count(),
+        "demo_hospitals_count": db.query(Hospital).filter(Hospital.is_demo == True).count(),
+        "total_ambulances_count": db.query(Ambulance).count()
     }
 
 @router.post("/seed", summary="Seed initial demo dataset")
@@ -67,13 +78,16 @@ async def create_hero_emergency(db: Session = Depends(get_db)):
             patient_count=3,
             critical_patient_count=1,
             severity="CRITICAL",
-            status="ACTIVE"
+            status="ACTIVE",
+            is_demo=True,
+            demo_type="HERO_DEMO"
         )
         db.add(hero_emg)
         db.commit()
         db.refresh(hero_emg)
     else:
         hero_emg.status = "ACTIVE"
+        hero_emg.is_demo = True
         db.commit()
         db.refresh(hero_emg)
     return hero_emg

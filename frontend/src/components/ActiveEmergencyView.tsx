@@ -253,11 +253,18 @@ export const ActiveEmergencyView: React.FC<ActiveEmergencyViewProps> = ({
           </div>
 
           {/* Emergency Session Code */}
-          <div className="text-right">
-            <span className="text-[10px] font-mono text-zinc-500 block uppercase">Emergency ID</span>
-            <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30">
-              {sessionCode}
-            </span>
+          <div className="text-right flex items-center gap-1.5">
+            {emergency.is_demo && (
+              <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-950/90 px-1.5 py-0.5 rounded border border-amber-500/50">
+                🟠 DEMO
+              </span>
+            )}
+            <div>
+              <span className="text-[10px] font-mono text-zinc-500 block uppercase">Emergency ID</span>
+              <span className="text-xs font-mono font-black text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30">
+                {sessionCode}
+              </span>
+            </div>
           </div>
         </div>
 

@@ -41,6 +41,8 @@ class Driver(Base):
     status = Column(String(50), default="AVAILABLE")  # AVAILABLE, EN_ROUTE, ON_SCENE, OFFLINE
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    is_demo = Column(Boolean, default=False, index=True)
+    demo_type = Column(String(50), nullable=True)
     last_active_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -67,6 +69,8 @@ class Emergency(Base):
     assigned_ambulance_id = Column(String(36), nullable=True)
     assigned_driver_id = Column(String(36), nullable=True)
     assigned_hospital_id = Column(String(36), nullable=True)
+    is_demo = Column(Boolean, default=False, index=True)
+    demo_type = Column(String(50), nullable=True)
     
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -85,6 +89,8 @@ class Ambulance(Base):
     current_driver_id = Column(String(36), nullable=True)
     current_assignment_id = Column(String(36), nullable=True)
     eta_minutes = Column(Float, default=0.0)
+    is_demo = Column(Boolean, default=False, index=True)
+    demo_type = Column(String(50), nullable=True)
     last_gps_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -105,6 +111,8 @@ class Hospital(Base):
     specialities = Column(JSON, default=list)
     status = Column(String(50), default="OPEN")  # OPEN, LIMITED, CLOSED
     capacity_status = Column(String(50), default="UNKNOWN")  # UNKNOWN, VERIFIED, LIMITED, FULL
+    is_demo = Column(Boolean, default=False, index=True)
+    demo_type = Column(String(50), nullable=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class RoadIncident(Base):
@@ -118,6 +126,7 @@ class RoadIncident(Base):
     description = Column(Text, nullable=True)
     radius_meters = Column(Integer, default=200)
     active = Column(Boolean, default=True)
+    is_demo = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Dispatch(Base):
@@ -134,6 +143,7 @@ class Dispatch(Base):
     total_response_time = Column(Float, default=0.0)
     reason = Column(Text, nullable=True)
     status = Column(String(50), default="DISPATCHED")  # DISPATCHED, ACCEPTED, COMPLETED, CANCELLED
+    is_demo = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -145,6 +155,7 @@ class DriverAlert(Base):
     driver_id = Column(String(36), nullable=False, index=True)
     ambulance_id = Column(String(36), nullable=False)
     status = Column(String(50), default="PENDING")  # PENDING, ACCEPTED, DECLINED, CANCELLED, EXPIRED
+    is_demo = Column(Boolean, default=False, index=True)
     alerted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     responded_at = Column(DateTime, nullable=True)
 
@@ -162,6 +173,7 @@ class EmergencyEvent(Base):
     metadata_json = Column(JSON, default=dict)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    is_demo = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
 class LocationLog(Base):

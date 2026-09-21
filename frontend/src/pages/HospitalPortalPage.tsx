@@ -53,6 +53,27 @@ export const HospitalPortalPage: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-6">
+      {/* ── DEMO MODE BANNER ── */}
+      {user?.is_demo && (
+        <div className="bg-gradient-to-r from-amber-950/90 via-zinc-900 to-amber-950/90 border-2 border-amber-500/80 rounded-2xl p-4 shadow-xl text-amber-200 text-xs font-mono space-y-2 animate-fadeIn card-glow-amber">
+          <div className="flex items-center justify-between font-black text-xs sm:text-sm text-amber-400">
+            <span className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-ping" />
+              🟠 DEMO MODE — HOSPITAL ER STAFF CONSOLE
+            </span>
+            <span className="px-2 py-0.5 rounded bg-amber-900 border border-amber-500/50 text-[10px] tracking-wider uppercase font-bold">
+              ISOLATED DEMO
+            </span>
+          </div>
+          <div className="text-zinc-300 text-[11px] pt-1 grid grid-cols-2 gap-x-4 gap-y-1">
+            <div>Hospital: <span className="font-bold text-white">LifeLine Demo Hospital</span></div>
+            <div>Staff: <span className="font-bold text-white">{user.name}</span> (Demo ER Staff)</div>
+            <div>ER Status: <span className="font-bold text-emerald-400">ACCEPTING INBOUND PATIENTS</span></div>
+            <div>Data Stream: <span className="font-bold text-amber-300">DEMO TRIAGE STREAM</span></div>
+          </div>
+        </div>
+      )}
+
       {/* Hospital Status Banner */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
@@ -78,13 +99,21 @@ export const HospitalPortalPage: React.FC = () => {
 
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
           <div>
-            <div className="text-xs font-mono text-zinc-400">AUTHENTICATED STAFF</div>
-            <div className="text-sm font-bold text-white mt-1">
-              {user?.name || 'Dr. Radhika Srinivasan'}
+            <div className="text-xs font-mono text-zinc-400">
+              {user?.is_demo ? 'DEMO ER STAFF' : 'AUTHENTICATED STAFF'}
             </div>
-            <div className="text-[11px] text-zinc-400 font-mono">{user?.phone || '+91 98402 34567'}</div>
+            <div className="text-sm font-bold text-white mt-1">
+              {user?.name || (user?.is_demo ? 'Demo ER Staff' : 'Dr. Radhika Srinivasan')}
+            </div>
+            <div className="text-[11px] text-zinc-400 font-mono">
+              {user?.phone || (user?.is_demo ? '+91 98840 00003' : '+91 98402 34567')}
+            </div>
           </div>
-          <div className="h-8 w-8 rounded-full bg-emerald-950 border border-emerald-500/40 flex items-center justify-center text-emerald-300 font-bold text-xs">
+          <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
+            user?.is_demo
+              ? 'bg-amber-950 border border-amber-500/50 text-amber-300'
+              : 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
+          }`}>
             ER
           </div>
         </div>
@@ -99,7 +128,7 @@ export const HospitalPortalPage: React.FC = () => {
           </h2>
           <div className="flex items-center gap-3">
             <span className="text-xs text-zinc-500 font-mono">
-              Auto-updating via Firebase RTDB • {lastRefreshed.toLocaleTimeString()}
+              {user?.is_demo ? 'Demo Telemetry Stream' : 'Auto-updating via Firebase RTDB'} • {lastRefreshed.toLocaleTimeString()}
             </span>
             <button
               onClick={fetchInboundEmergencies}
@@ -145,6 +174,11 @@ export const HospitalPortalPage: React.FC = () => {
                         >
                           {emg.severity} SEVERITY
                         </span>
+                        {emg.is_demo && (
+                          <span className="text-[10px] font-mono bg-amber-950 text-amber-400 border border-amber-500/50 px-1.5 py-0.5 rounded font-bold">
+                            DEMO
+                          </span>
+                        )}
                       </div>
                       <h3 className="font-bold text-white text-base mt-1">
                         {emg.title || emg.incident_type.replace('_', ' ')}

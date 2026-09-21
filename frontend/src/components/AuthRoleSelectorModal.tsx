@@ -89,6 +89,45 @@ export const AuthRoleSelectorModal: React.FC<AuthRoleSelectorModalProps> = ({
 
   if (!isOpen) return null;
 
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
+
+  // Check backend demo status
+  useEffect(() => {
+    lifelineApi.getDemoStatus().then((res) => {
+      setIsDemoMode(res.demo_mode);
+    }).catch(() => {
+      setIsDemoMode(true);
+    });
+  }, []);
+
+  const handleDemoLogin = async (role: UserRole, demoId: string) => {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const res = await lifelineApi.demoLogin({ role, demo_id: demoId });
+      if (res.driver) {
+        setStep('SUCCESS');
+        setTimeout(() => {
+          if (onAuthSuccess) {
+            onAuthSuccess(res.driver);
+          }
+          onClose();
+          if (role === 'DRIVER') {
+            navigate('/ambulance/tracker');
+          } else if (role === 'HOSPITAL_STAFF') {
+            navigate('/hospital/portal');
+          } else {
+            navigate('/operations');
+          }
+        }, 800);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.response?.data?.detail || 'Demo login failed.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSelectRole = (role: UserRole) => {
     setSelectedRole(role);
     setErrorMessage(null);
@@ -372,6 +411,117 @@ export const AuthRoleSelectorModal: React.FC<AuthRoleSelectorModalProps> = ({
               </svg>
               <span>Continue with Google</span>
             </button>
+
+            {/* ── CONTROLLED DEMO MODE LOGINS (Environment-Controlled) ── */}
+            {isDemoMode && (
+              <div className="pt-3 border-t border-zinc-800/90 space-y-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="h-px bg-zinc-800 flex-1" />
+                  <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold tracking-widest">
+                    ──────── OR ────────
+                  </span>
+                  <div className="h-px bg-zinc-800 flex-1" />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-950/80 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold tracking-wider">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    <span>DEMO MODE</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-500">Controlled Simulation</span>
+                </div>
+
+                {selectedRole === 'DRIVER' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleDemoLogin('DRIVER', 'demo-driver-a')}
+                      disabled={isSubmitting}
+                      className="p-3 rounded-2xl bg-zinc-900/90 hover:bg-amber-950/40 border border-amber-500/40 hover:border-amber-400 text-left transition-all group active:scale-[0.98] shadow-lg shadow-amber-950/20"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-xs shrink-0">
+                          🚑 A
+                        </div>
+                        <div className="overflow-hidden">
+                          <div className="font-bold text-xs text-white group-hover:text-amber-200 truncate">
+                            Enter Demo Driver A
+                          </div>
+                          <div className="text-[10px] font-mono text-zinc-400 truncate">
+                            LL-DEMO-AMB-001 (ALS)
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => handleDemoLogin('DRIVER', 'demo-driver-b')}
+                      disabled={isSubmitting}
+                      className="p-3 rounded-2xl bg-zinc-900/90 hover:bg-amber-950/40 border border-amber-500/40 hover:border-amber-400 text-left transition-all group active:scale-[0.98] shadow-lg shadow-amber-950/20"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-xl bg-amber-950/80 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-xs shrink-0">
+                          🚑 B
+                        </div>
+                        <div className="overflow-hidden">
+                          <div className="font-bold text-xs text-white group-hover:text-amber-200 truncate">
+                            Enter Demo Driver B
+                          </div>
+                          <div className="text-[10px] font-mono text-zinc-400 truncate">
+                            LL-DEMO-AMB-002 (BLS)
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+
+                {selectedRole === 'HOSPITAL_STAFF' && (
+                  <button
+                    onClick={() => handleDemoLogin('HOSPITAL_STAFF', 'demo-hospital')}
+                    disabled={isSubmitting}
+                    className="w-full p-3.5 rounded-2xl bg-zinc-900/90 hover:bg-amber-950/40 border border-amber-500/40 hover:border-amber-400 text-left transition-all group active:scale-[0.98] shadow-lg shadow-amber-950/20 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-amber-950/80 border border-amber-500/40 flex items-center justify-center text-amber-400 text-lg shrink-0">
+                        🏥
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-white group-hover:text-amber-200">
+                          Enter Demo Hospital
+                        </div>
+                        <div className="text-[11px] font-mono text-zinc-400">
+                          LifeLine Demo Hospital · Demo ER Staff
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-amber-400 group-hover:translate-x-1 transition-transform shrink-0" />
+                  </button>
+                )}
+
+                {selectedRole === 'OPERATOR' && (
+                  <button
+                    onClick={() => handleDemoLogin('OPERATOR', 'demo-operator')}
+                    disabled={isSubmitting}
+                    className="w-full p-3.5 rounded-2xl bg-zinc-900/90 hover:bg-amber-950/40 border border-amber-500/40 hover:border-amber-400 text-left transition-all group active:scale-[0.98] shadow-lg shadow-amber-950/20 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-amber-950/80 border border-amber-500/40 flex items-center justify-center text-amber-400 text-lg shrink-0">
+                        ⚡
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-white group-hover:text-amber-200">
+                          Enter Demo Operations Dispatch
+                        </div>
+                        <div className="text-[11px] font-mono text-zinc-400">
+                          Central Dispatch Command (Demo)
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-amber-400 group-hover:translate-x-1 transition-transform shrink-0" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

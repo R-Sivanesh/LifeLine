@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models import Driver, Ambulance
+from app.config import settings
 from app.schemas import (
     DriverGoogleAuthRequest,
     DriverAuthResponse,
@@ -14,11 +15,122 @@ from app.schemas import (
     SendOtpRequest,
     SendOtpResponse,
     VerifyOtpRequest,
-    VerifyOtpResponse
+    VerifyOtpResponse,
+    DemoLoginRequest,
+    DemoStatusResponse
 )
 from app.services.otp_service import otp_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Driver Fleet"])
+
+@router.get("/demo-status", response_model=DemoStatusResponse, summary="Get environment demo mode status")
+async def get_demo_status():
+    """
+    Returns whether DEMO_MODE is enabled in the current deployment environment.
+    """
+    return DemoStatusResponse(demo_mode=settings.DEMO_MODE)
+
+@router.post("/demo-login", response_model=DriverAuthResponse, summary="Authenticate Demo Driver or Demo Hospital Staff")
+async def demo_login(payload: DemoLoginRequest, db: Session = Depends(get_db)):
+    """
+    Authenticates a demo unit (Demo Driver A, Demo Driver B, Demo ER Staff).
+    STRICT SECURITY RULE: Rejects immediately if DEMO_MODE=False in environment.
+    """
+    if not settings.DEMO_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo authentication is disabled in this environment (DEMO_MODE=false)."
+        )
+
+    now = datetime.now(timezone.utc)
+    demo_id = payload.demo_id.lower().strip()
+
+    if "driver-b" in demo_id or demo_id == "drv-demo-002":
+        target_driver_id = "drv-demo-002"
+        target_email = "demo.driver.b@lifeline.org"
+        target_name = "Demo Driver B"
+        target_role = "DRIVER"
+        target_amb_id = "amb-demo-002"
+        target_lat = 13.0305
+        target_lng = 80.2250
+    elif "hospital" in demo_id or demo_id == "staff-demo-001":
+        target_driver_id = "staff-demo-001"
+        target_email = "demo.hospital@lifeline.org"
+        target_name = "Demo ER Staff"
+        target_role = "HOSPITAL_STAFF"
+        target_amb_id = None
+        target_lat = 13.0100
+        target_lng = 80.2120
+    else:
+        # Default to Demo Driver A
+        target_driver_id = "drv-demo-001"
+        target_email = "demo.driver.a@lifeline.org"
+        target_name = "Demo Driver A"
+        target_role = "DRIVER"
+        target_amb_id = "amb-demo-001"
+        target_lat = 13.0425
+        target_lng = 80.2410
+
+    driver = db.query(Driver).filter((Driver.id == target_driver_id) | (Driver.email == target_email)).first()
+    if not driver:
+        driver = Driver(
+            id=target_driver_id,
+            google_id=f"demo_goog_{target_driver_id}",
+            name=target_name,
+            email=target_email,
+            phone="+91 98401 00001" if target_role == "DRIVER" else "+91 98402 00001",
+            phone_verified=True,
+            otp_verified_at=now,
+            role=target_role,
+            assigned_ambulance_id=target_amb_id,
+            status="AVAILABLE",
+            latitude=target_lat,
+            longitude=target_lng,
+            is_demo=True,
+            demo_type=f"DEMO_{target_role}",
+            last_active_at=now,
+            created_at=now
+        )
+        db.add(driver)
+        db.commit()
+        db.refresh(driver)
+    else:
+        driver.status = "AVAILABLE"
+        driver.last_active_at = now
+        driver.is_demo = True
+        db.commit()
+        db.refresh(driver)
+
+    amb = None
+    if driver.assigned_ambulance_id:
+        amb_model = db.query(Ambulance).filter(
+            (Ambulance.id == driver.assigned_ambulance_id) | (Ambulance.vehicle_number == driver.assigned_ambulance_id)
+        ).first()
+        if not amb_model:
+            amb_model = Ambulance(
+                id=driver.assigned_ambulance_id,
+                vehicle_number="LL-DEMO-AMB-001" if "001" in driver.assigned_ambulance_id else "LL-DEMO-AMB-002",
+                latitude=target_lat,
+                longitude=target_lng,
+                capability="ADVANCED" if "001" in driver.assigned_ambulance_id else "BASIC",
+                status="AVAILABLE",
+                is_demo=True,
+                demo_type="DEMO_FLEET",
+                last_gps_at=now,
+                created_at=now
+            )
+            db.add(amb_model)
+            db.commit()
+            db.refresh(amb_model)
+        amb = AmbulanceResponse.model_validate(amb_model)
+
+    token = f"ll_demo_{secrets.token_urlsafe(32)}"
+
+    return DriverAuthResponse(
+        driver=DriverResponse.model_validate(driver),
+        token=token,
+        ambulance=amb
+    )
 
 @router.post("/send-otp", response_model=SendOtpResponse, summary="Send Mobile OTP Verification Code")
 async def send_otp(payload: SendOtpRequest):

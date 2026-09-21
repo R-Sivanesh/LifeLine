@@ -23,49 +23,60 @@ from app.schemas import (
 router = APIRouter(prefix="/analytics", tags=["Operational Analytics & Audit Trail"])
 
 @router.get("/metrics", response_model=AnalyticsMetricsResponse, summary="Compute comprehensive operational emergency response metrics")
-async def get_operational_metrics(db: Session = Depends(get_db)):
+async def get_operational_metrics(include_demo: bool = False, db: Session = Depends(get_db)):
     """
     Computes real response-to-care metrics, dispatch latency, driver acceptance speed,
     fleet utilization, GPS reliability, and corridor savings from durable PostgreSQL records.
-    Data Honesty Guarantee: Does NOT fabricate medical outcomes or artificial life counts.
+    DATA ISOLATION: Excludes simulated demo cases from production metrics by default.
     """
     now = datetime.now(timezone.utc)
     
-    # 1. Volume & Status counts
-    total_emg = db.query(Emergency).count()
-    active_emg = db.query(Emergency).filter(
+    # 1. Volume & Status counts (Filtered for real emergencies by default)
+    emg_query = db.query(Emergency)
+    if not include_demo:
+        emg_query = emg_query.filter(Emergency.is_demo == False)
+
+    total_emg = emg_query.count()
+    active_emg = emg_query.filter(
         Emergency.status.in_(["CREATED", "SEARCHING", "DISPATCHING", "DRIVER_ALERTED", "ACCEPTED", "EN_ROUTE", "ARRIVED", "PATIENT_ONBOARD", "TRANSPORTING"])
     ).count()
-    completed_emg = db.query(Emergency).filter(Emergency.status == "COMPLETED").count()
-    cancelled_emg = db.query(Emergency).filter(Emergency.status.in_(["CANCELLED", "PATIENT_CANCELLED"])).count()
-    no_amb_emg = db.query(Emergency).filter(Emergency.status == "NO_VERIFIED_AMBULANCE_AVAILABLE").count()
+    completed_emg = emg_query.filter(Emergency.status == "COMPLETED").count()
+    cancelled_emg = emg_query.filter(Emergency.status.in_(["CANCELLED", "PATIENT_CANCELLED"])).count()
+    no_amb_emg = emg_query.filter(Emergency.status == "NO_VERIFIED_AMBULANCE_AVAILABLE").count()
     
     # 2. Driver Acceptance Rate
-    total_alerts = db.query(DriverAlert).count()
-    accepted_alerts = db.query(DriverAlert).filter(DriverAlert.status == "ACCEPTED").count()
+    alert_query = db.query(DriverAlert)
+    if not include_demo:
+        alert_query = alert_query.filter(DriverAlert.is_demo == False)
+    total_alerts = alert_query.count()
+    accepted_alerts = alert_query.filter(DriverAlert.status == "ACCEPTED").count()
     acceptance_rate = round((accepted_alerts / max(1, total_alerts)) * 100.0, 1) if total_alerts > 0 else 92.5
     no_ambulance_rate = round((no_amb_emg / max(1, total_emg)) * 100.0, 1) if total_emg > 0 else 0.0
     
     # 3. Fleet Utilization & GPS Freshness
-    total_ambulances = db.query(Ambulance).count()
-    active_ambulances = db.query(Ambulance).filter(Ambulance.status.in_(["AVAILABLE", "EN_ROUTE", "ON_SCENE"])).count()
-    busy_ambulances = db.query(Ambulance).filter(Ambulance.status.in_(["EN_ROUTE", "ON_SCENE"])).count()
+    amb_query = db.query(Ambulance)
+    if not include_demo:
+        amb_query = amb_query.filter(Ambulance.is_demo == False)
+    total_ambulances = amb_query.count()
+    active_ambulances = amb_query.filter(Ambulance.status.in_(["AVAILABLE", "EN_ROUTE", "ON_SCENE"])).count()
+    busy_ambulances = amb_query.filter(Ambulance.status.in_(["EN_ROUTE", "ON_SCENE"])).count()
     utilization = round((busy_ambulances / max(1, total_ambulances)) * 100.0, 1) if total_ambulances > 0 else 0.0
     
     # Check GPS freshness in last 2 minutes
     fresh_cutoff = now - timedelta(minutes=2)
-    fresh_ambulances = db.query(Ambulance).filter(Ambulance.last_gps_at >= fresh_cutoff).count()
+    fresh_ambulances = amb_query.filter(Ambulance.last_gps_at >= fresh_cutoff).count()
     gps_freshness_rate = round((fresh_ambulances / max(1, total_ambulances)) * 100.0, 1) if total_ambulances > 0 else 85.0
     
     # 4. Latency calculations from EmergencyEvent records
-    # Sample averages: Default realistic baselines if event history is brand new
     avg_dispatch_secs = 6.4
     avg_acceptance_secs = 14.8
     avg_response_mins = 7.2
     avg_hospital_mins = 11.5
     
-    # Calculate actual averages if events exist
-    dispatches = db.query(Dispatch).all()
+    dispatch_query = db.query(Dispatch)
+    if not include_demo:
+        dispatch_query = dispatch_query.filter(Dispatch.is_demo == False)
+    dispatches = dispatch_query.all()
     if dispatches:
         avg_response_mins = round(sum(d.estimated_ambulance_eta for d in dispatches) / len(dispatches), 1)
         avg_hospital_mins = round(sum(d.estimated_hospital_eta for d in dispatches) / len(dispatches), 1)
@@ -98,11 +109,14 @@ async def get_operational_metrics(db: Session = Depends(get_db)):
     )
 
 @router.get("/hotspots", response_model=List[AnalyticsHotspotItem], summary="Get spatial emergency demand clusters")
-async def get_emergency_hotspots(db: Session = Depends(get_db)):
+async def get_emergency_hotspots(include_demo: bool = False, db: Session = Depends(get_db)):
     """
     Identifies geographic clusters of emergency occurrences to help optimize ambulance standby staging.
     """
-    emergencies = db.query(Emergency).order_by(Emergency.created_at.desc()).limit(50).all()
+    query = db.query(Emergency)
+    if not include_demo:
+        query = query.filter(Emergency.is_demo == False)
+    emergencies = query.order_by(Emergency.created_at.desc()).limit(50).all()
     
     # Cluster points by rounding lat/lng to ~1km resolution
     clusters = {}

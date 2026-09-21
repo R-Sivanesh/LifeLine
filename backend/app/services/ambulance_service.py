@@ -177,12 +177,18 @@ def rank_live_ambulances(
 
 def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[AmbulanceRecommendation]:
     """
-    Deterministically ranks database/seeded ambulances (used primarily in DEMO/SIMULATION mode).
+    Deterministically ranks database/seeded ambulances (used in DEMO/SIMULATION mode and fallback).
+    DATA ISOLATION GUARANTEE: Real emergencies (is_demo=False) NEVER select demo ambulances.
     """
     recommendations: List[AmbulanceRecommendation] = []
     is_critical = emergency.severity in ("CRITICAL", "HIGH") or emergency.critical_patient_count > 0
-    
+    is_demo_emergency = getattr(emergency, "is_demo", False)
+
     for amb in ambulances:
+        # Strict isolation: If this is a real emergency, exclude demo fleet units
+        if not is_demo_emergency and getattr(amb, "is_demo", False):
+            continue
+
         dist_km = calculate_haversine_distance(emergency.latitude, emergency.longitude, amb.latitude, amb.longitude)
         eta = estimate_ambulance_eta(dist_km)
         
@@ -251,10 +257,12 @@ def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[A
                 reasons=reasons,
                 latitude=amb.latitude,
                 longitude=amb.longitude,
-                source="DEMO_TELEMETRY",
+                source="DEMO_TELEMETRY" if getattr(amb, "is_demo", False) else "DATABASE",
                 status=amb.status,
                 updated_at=time.time() * 1000.0,
-                freshness_status="DEMO"
+                freshness_status="DEMO" if getattr(amb, "is_demo", False) else "LIVE",
+                is_demo=getattr(amb, "is_demo", False),
+                demo_type=getattr(amb, "demo_type", None)
             )
         )
     

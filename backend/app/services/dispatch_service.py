@@ -43,11 +43,16 @@ def record_emergency_event(
     actor_id: Optional[str] = None,
     metadata_json: Optional[Dict[str, Any]] = None,
     latitude: Optional[float] = None,
-    longitude: Optional[float] = None
+    longitude: Optional[float] = None,
+    is_demo: Optional[bool] = None
 ) -> EmergencyEvent:
     """
     Appends an immutable audit event to PostgreSQL.
     """
+    if is_demo is None:
+        emg = db.query(Emergency).filter(Emergency.id == emergency_id).first()
+        is_demo = getattr(emg, "is_demo", False) if emg else False
+
     event = EmergencyEvent(
         emergency_id=emergency_id,
         event_type=event_type,
@@ -57,6 +62,7 @@ def record_emergency_event(
         metadata_json=metadata_json or {},
         latitude=latitude,
         longitude=longitude,
+        is_demo=is_demo,
         created_at=datetime.now(timezone.utc)
     )
     db.add(event)
@@ -69,6 +75,7 @@ def alert_eligible_drivers(
 ) -> List[DriverAlert]:
     """
     Creates dispatch alert records for eligible ambulances / drivers.
+    For DEMO emergencies, alerts all active demo units (Demo Driver A + B) to enable multi-driver concurrent acceptance testing.
     """
     now = datetime.now(timezone.utc)
     alerts: List[DriverAlert] = []
@@ -76,9 +83,17 @@ def alert_eligible_drivers(
     # 1. Update emergency status to DRIVER_ALERTED
     emergency.status = "DRIVER_ALERTED"
     emergency.updated_at = now
+
+    target_ambulance_ids = list(ambulance_ids)
+    # For demo emergencies, ensure both demo ambulances are alerted
+    if getattr(emergency, "is_demo", False):
+        demo_amb_ids = ["amb-demo-001", "amb-demo-002"]
+        for d_id in demo_amb_ids:
+            if d_id not in target_ambulance_ids and db.query(Ambulance).filter(Ambulance.id == d_id).first():
+                target_ambulance_ids.append(d_id)
     
     # 2. Find linked or available drivers for each ambulance
-    for amb_id in ambulance_ids:
+    for amb_id in target_ambulance_ids:
         # Check if alert already exists
         existing = db.query(DriverAlert).filter(
             DriverAlert.emergency_id == emergency.id,
@@ -89,17 +104,24 @@ def alert_eligible_drivers(
             alerts.append(existing)
             continue
             
-        driver = db.query(Driver).filter(
-            (Driver.assigned_ambulance_id == amb_id) | (Driver.status == "AVAILABLE")
-        ).first()
+        # Priority 1: Exact assigned ambulance match
+        driver = db.query(Driver).filter(Driver.assigned_ambulance_id == amb_id).first()
+        if not driver:
+            # Priority 2: Matching by vehicle number
+            driver = db.query(Driver).filter(Driver.assigned_ambulance_id.like(f"%{amb_id}%")).first()
+        if not driver:
+            # Priority 3: Any available driver
+            driver = db.query(Driver).filter(Driver.status == "AVAILABLE").first()
         
         driver_id = driver.id if driver else f"drv-{amb_id}"
+        is_demo_flag = getattr(emergency, "is_demo", False) or getattr(driver, "is_demo", False)
         
         alert = DriverAlert(
             emergency_id=emergency.id,
             driver_id=driver_id,
             ambulance_id=amb_id,
             status="PENDING",
+            is_demo=is_demo_flag,
             alerted_at=now
         )
         db.add(alert)
@@ -112,7 +134,8 @@ def alert_eligible_drivers(
             actor_type="SYSTEM",
             actor_id=driver_id,
             description=f"Dispatch alert transmitted to Ambulance {amb_id} / Driver {driver_id}",
-            metadata_json={"ambulance_id": amb_id, "driver_id": driver_id}
+            metadata_json={"ambulance_id": amb_id, "driver_id": driver_id},
+            is_demo=is_demo_flag
         )
         
     db.commit()

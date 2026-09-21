@@ -50,11 +50,20 @@ class EmergencyResponse(BaseModel):
     assigned_ambulance_id: Optional[str] = None
     assigned_driver_id: Optional[str] = None
     assigned_hospital_id: Optional[str] = None
+    is_demo: bool = False
+    demo_type: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     session: Optional[EmergencySessionResponse] = None
 
 # ==================== DRIVER & AUTH SCHEMAS ====================
+class DemoLoginRequest(BaseModel):
+    role: str = "DRIVER"  # DRIVER, HOSPITAL_STAFF
+    demo_id: str  # demo-driver-a, demo-driver-b, demo-hospital-1
+
+class DemoStatusResponse(BaseModel):
+    demo_mode: bool = True
+
 class DriverGoogleAuthRequest(BaseModel):
     google_id: Optional[str] = None
     email: str
@@ -101,6 +110,8 @@ class DriverResponse(BaseModel):
     status: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    is_demo: bool = False
+    demo_type: Optional[str] = None
     last_active_at: Optional[datetime] = None
 
 class DriverAuthResponse(BaseModel):
@@ -147,6 +158,8 @@ class AmbulanceResponse(BaseModel):
     current_driver_id: Optional[str] = None
     current_assignment_id: Optional[str] = None
     eta_minutes: float
+    is_demo: bool = False
+    demo_type: Optional[str] = None
     last_gps_at: Optional[datetime] = None
 
 class LiveAmbulanceGPSItem(BaseModel):
@@ -161,7 +174,9 @@ class LiveAmbulanceGPSItem(BaseModel):
     accuracy: Optional[float] = None
     updated_at: float  # Unix timestamp in seconds or ms
     source: str = "LIVE_GPS"
-    freshness_status: str = "LIVE"  # LIVE, STALE, OFFLINE
+    freshness_status: str = "LIVE"  # LIVE, STALE, OFFLINE, DEMO
+    is_demo: bool = False
+    demo_type: Optional[str] = None
     driver_id: Optional[str] = None
     driver_name: Optional[str] = None
 
@@ -177,6 +192,8 @@ class AmbulanceTelemetryRequest(BaseModel):
     accuracy: Optional[float] = None
     updated_at: Optional[float] = None
     source: str = "LIVE_GPS"
+    is_demo: bool = False
+    demo_type: Optional[str] = None
     driver_id: Optional[str] = None
 
 class LiveAmbulancesResponse(BaseModel):
@@ -199,6 +216,8 @@ class AmbulanceRecommendation(BaseModel):
     status: Optional[str] = "AVAILABLE"
     updated_at: Optional[float] = None
     freshness_status: Optional[str] = "LIVE"
+    is_demo: bool = False
+    demo_type: Optional[str] = None
     driver_id: Optional[str] = None
     driver_name: Optional[str] = None
 
@@ -210,6 +229,8 @@ class DriverAlertResponse(BaseModel):
     driver_id: str
     ambulance_id: str
     status: str  # PENDING, ACCEPTED, DECLINED, CANCELLED, EXPIRED
+    is_demo: bool = False
+    demo_type: Optional[str] = None
     alerted_at: datetime
     emergency_code: Optional[str] = None
     incident_type: Optional[str] = None
@@ -281,6 +302,8 @@ class HospitalResponse(BaseModel):
     specialities: List[str] = Field(default_factory=list)
     status: str
     capacity_status: str = "UNKNOWN"
+    is_demo: bool = False
+    demo_type: Optional[str] = None
 
 class NearbyHospitalItem(BaseModel):
     id: str
@@ -300,6 +323,8 @@ class NearbyHospitalItem(BaseModel):
     trauma_capable: Optional[bool] = None
     icu_available: Optional[bool] = None
     available_beds: Optional[int] = None
+    is_demo: bool = False
+    demo_type: Optional[str] = None
 
 class NearbyHospitalsResponse(BaseModel):
     source: str = "GOOGLE_PLACES"
@@ -325,6 +350,8 @@ class HospitalRecommendation(BaseModel):
     source: Optional[str] = "GOOGLE_PLACES"
     verification_status: Optional[str] = "PUBLICLY_VERIFIED"
     capacity_status: Optional[str] = "UNKNOWN"
+    is_demo: bool = False
+    demo_type: Optional[str] = None
 
 # ==================== ROUTING & CORRIDOR SCHEMAS ====================
 class Coordinate(BaseModel):
@@ -535,4 +562,5 @@ class EmergencyAuditEventResponse(BaseModel):
     metadata_json: Dict[str, Any] = Field(default_factory=dict)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    is_demo: bool = False
     created_at: datetime

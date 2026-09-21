@@ -16,18 +16,35 @@ def ensure_db():
         try:
             Base.metadata.create_all(bind=engine)
             # Safe schema auto-migration for SQLite / PostgreSQL missing columns
+            tables_to_migrate = [
+                "drivers", "ambulances", "hospitals", "emergencies",
+                "dispatches", "driver_alerts", "emergency_events", "road_incidents"
+            ]
             try:
                 with engine.connect() as conn:
-                    try:
-                        conn.execute(sqlalchemy.text("ALTER TABLE drivers ADD COLUMN phone_verified BOOLEAN DEFAULT 0"))
-                        conn.commit()
-                    except Exception:
-                        pass
-                    try:
-                        conn.execute(sqlalchemy.text("ALTER TABLE drivers ADD COLUMN otp_verified_at DATETIME"))
-                        conn.commit()
-                    except Exception:
-                        pass
+                    # Drivers phone/otp columns
+                    for col_sql in [
+                        "ALTER TABLE drivers ADD COLUMN phone_verified BOOLEAN DEFAULT 0",
+                        "ALTER TABLE drivers ADD COLUMN otp_verified_at DATETIME"
+                    ]:
+                        try:
+                            conn.execute(sqlalchemy.text(col_sql))
+                            conn.commit()
+                        except Exception:
+                            pass
+
+                    # Demo mode columns across all tables
+                    for table in tables_to_migrate:
+                        try:
+                            conn.execute(sqlalchemy.text(f"ALTER TABLE {table} ADD COLUMN is_demo BOOLEAN DEFAULT 0"))
+                            conn.commit()
+                        except Exception:
+                            pass
+                        try:
+                            conn.execute(sqlalchemy.text(f"ALTER TABLE {table} ADD COLUMN demo_type VARCHAR(50)"))
+                            conn.commit()
+                        except Exception:
+                            pass
             except Exception:
                 pass
             db = SessionLocal()

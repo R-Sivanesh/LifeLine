@@ -16,11 +16,152 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 
-def seed_database(db: Session, force_reset: bool = False):
+def seed_demo_accounts_only(db: Session, now: datetime):
+    """Adds demo drivers, demo ambulances, and demo hospital if missing."""
+    demo_ambs = [
+        Ambulance(
+            id="amb-demo-001",
+            vehicle_number="LL-DEMO-AMB-001",
+            latitude=13.0425,
+            longitude=80.2410,
+            capability="ADVANCED",
+            equipment=["ventilator", "defibrillator", "oxygen", "cardiac_monitor", "trauma_kit"],
+            status="AVAILABLE",
+            eta_minutes=5.0,
+            is_demo=True,
+            demo_type="DEMO_FLEET_A",
+            last_gps_at=now,
+            created_at=now
+        ),
+        Ambulance(
+            id="amb-demo-002",
+            vehicle_number="LL-DEMO-AMB-002",
+            latitude=13.0305,
+            longitude=80.2250,
+            capability="BASIC",
+            equipment=["oxygen", "first_aid_kit", "stretcher", "splints"],
+            status="AVAILABLE",
+            eta_minutes=7.0,
+            is_demo=True,
+            demo_type="DEMO_FLEET_B",
+            last_gps_at=now,
+            created_at=now
+        )
+    ]
+    for a in demo_ambs:
+        if not db.query(Ambulance).filter(Ambulance.id == a.id).first():
+            db.add(a)
+
+    demo_drivers = [
+        Driver(
+            id="drv-demo-001",
+            google_id="demo_goog_driver_a",
+            name="Demo Driver A",
+            email="demo.driver.a@lifeline.org",
+            phone="+91 98401 00001",
+            phone_verified=True,
+            otp_verified_at=now,
+            role="DRIVER",
+            assigned_ambulance_id="amb-demo-001",
+            status="AVAILABLE",
+            latitude=13.0425,
+            longitude=80.2410,
+            is_demo=True,
+            demo_type="DEMO_DRIVER_A",
+            last_active_at=now,
+            created_at=now
+        ),
+        Driver(
+            id="drv-demo-002",
+            google_id="demo_goog_driver_b",
+            name="Demo Driver B",
+            email="demo.driver.b@lifeline.org",
+            phone="+91 98401 00002",
+            phone_verified=True,
+            otp_verified_at=now,
+            role="DRIVER",
+            assigned_ambulance_id="amb-demo-002",
+            status="AVAILABLE",
+            latitude=13.0305,
+            longitude=80.2250,
+            is_demo=True,
+            demo_type="DEMO_DRIVER_B",
+            last_active_at=now,
+            created_at=now
+        ),
+        Driver(
+            id="staff-demo-001",
+            google_id="demo_goog_hospital_staff",
+            name="Demo ER Staff",
+            email="demo.hospital@lifeline.org",
+            phone="+91 98402 00001",
+            phone_verified=True,
+            otp_verified_at=now,
+            role="HOSPITAL_STAFF",
+            assigned_ambulance_id=None,
+            status="AVAILABLE",
+            is_demo=True,
+            demo_type="DEMO_STAFF",
+            last_active_at=now,
+            created_at=now
+        )
+    ]
+    for d in demo_drivers:
+        if not db.query(Driver).filter(Driver.id == d.id).first():
+            db.add(d)
+
+    demo_hosp = Hospital(
+        id="hosp-demo-001",
+        place_id="demo_place_lifeline_hospital",
+        name="LifeLine Demo Hospital",
+        latitude=13.0100,
+        longitude=80.2120,
+        address="Demo ER Ward, Grand Southern Trunk Rd, Chennai, Tamil Nadu 600044",
+        phone="+914422201000",
+        emergency_available=True,
+        trauma_capable=True,
+        icu_available=True,
+        available_beds=12,
+        specialities=["Level 1 Trauma", "Emergency Medicine", "Cardiac Care"],
+        status="OPEN",
+        capacity_status="DEMO",
+        is_demo=True,
+        demo_type="DEMO_HOSPITAL",
+        updated_at=now
+    )
+    if not db.query(Hospital).filter(Hospital.id == demo_hosp.id).first():
+        db.add(demo_hosp)
+
+    db.commit()
+
+def seed_database(db: Session, force_reset: bool = False, reset_only_demo: bool = False):
     """
     Populates registered ambulances, authenticated drivers, facilities, and demo baseline data.
+    If reset_only_demo is True, only resets demo records (is_demo=True) while preserving real data.
     """
-    if force_reset:
+    now = datetime.now(timezone.utc)
+
+    if reset_only_demo:
+        # Safely reset ONLY demo data
+        demo_emg_ids = [e.id for e in db.query(Emergency.id).filter(Emergency.is_demo == True).all()]
+        if demo_emg_ids:
+            db.query(EmergencySession).filter(EmergencySession.emergency_id.in_(demo_emg_ids)).delete(synchronize_session=False)
+            db.query(Dispatch).filter(Dispatch.emergency_id.in_(demo_emg_ids)).delete(synchronize_session=False)
+            db.query(RouteEvent).filter(RouteEvent.emergency_id.in_(demo_emg_ids)).delete(synchronize_session=False)
+            db.query(DriverAlert).filter(DriverAlert.emergency_id.in_(demo_emg_ids)).delete(synchronize_session=False)
+            db.query(EmergencyEvent).filter(EmergencyEvent.emergency_id.in_(demo_emg_ids)).delete(synchronize_session=False)
+
+        db.query(EmergencyEvent).filter(EmergencyEvent.is_demo == True).delete(synchronize_session=False)
+        db.query(DriverAlert).filter(DriverAlert.is_demo == True).delete(synchronize_session=False)
+        db.query(Dispatch).filter(Dispatch.is_demo == True).delete(synchronize_session=False)
+        db.query(Emergency).filter(Emergency.is_demo == True).delete(synchronize_session=False)
+        db.query(Driver).filter(Driver.is_demo == True).delete(synchronize_session=False)
+        db.query(Ambulance).filter(Ambulance.is_demo == True).delete(synchronize_session=False)
+        db.query(Hospital).filter(Hospital.is_demo == True).delete(synchronize_session=False)
+        db.query(RoadIncident).filter(RoadIncident.is_demo == True).delete(synchronize_session=False)
+        db.commit()
+
+    elif force_reset:
         db.query(EmergencyEvent).delete()
         db.query(DriverAlert).delete()
         db.query(RouteEvent).delete()
@@ -33,13 +174,13 @@ def seed_database(db: Session, force_reset: bool = False):
         db.query(RoadIncident).delete()
         db.commit()
 
-    if db.query(Hospital).count() > 0 and not force_reset:
-        logger.info("Database already seeded with hospitals and ambulances.")
+    if not force_reset and not reset_only_demo and db.query(Hospital).count() > 0:
+        # Check if demo accounts exist, if not seed them
+        if db.query(Driver).filter(Driver.is_demo == True).count() == 0:
+            seed_demo_accounts_only(db, now)
         return
 
-    now = datetime.now(timezone.utc)
-
-    # 1. Seed Registered Ambulances Fleet
+    # 1. Seed Registered Real Ambulances Fleet (is_demo=False)
     ambulances = [
         Ambulance(
             id="amb-101",
@@ -50,6 +191,7 @@ def seed_database(db: Session, force_reset: bool = False):
             equipment=["oxygen", "first_aid_kit", "stretcher"],
             status="AVAILABLE",
             eta_minutes=4.0,
+            is_demo=False,
             last_gps_at=now,
             created_at=now
         ),
@@ -62,6 +204,7 @@ def seed_database(db: Session, force_reset: bool = False):
             equipment=["ventilator", "defibrillator", "oxygen", "cardiac_monitor", "trauma_kit"],
             status="AVAILABLE",
             eta_minutes=6.0,
+            is_demo=False,
             last_gps_at=now,
             created_at=now
         ),
@@ -74,6 +217,7 @@ def seed_database(db: Session, force_reset: bool = False):
             equipment=["ventilator", "defibrillator", "advanced_cardiac_life_support", "infusion_pump", "oxygen"],
             status="AVAILABLE",
             eta_minutes=12.0,
+            is_demo=False,
             last_gps_at=now,
             created_at=now
         ),
@@ -86,6 +230,7 @@ def seed_database(db: Session, force_reset: bool = False):
             equipment=["oxygen", "aed", "splints"],
             status="BUSY",
             eta_minutes=8.0,
+            is_demo=False,
             last_gps_at=now,
             created_at=now
         ),
@@ -98,6 +243,7 @@ def seed_database(db: Session, force_reset: bool = False):
             equipment=["ventilator", "defibrillator", "trauma_kit", "suction_unit"],
             status="AVAILABLE",
             eta_minutes=9.0,
+            is_demo=False,
             last_gps_at=now,
             created_at=now
         ),
@@ -110,14 +256,44 @@ def seed_database(db: Session, force_reset: bool = False):
             equipment=["ventilator", "defibrillator", "cardiac_monitor", "blood_warmer"],
             status="AVAILABLE",
             eta_minutes=15.0,
+            is_demo=False,
+            last_gps_at=now,
+            created_at=now
+        ),
+        # ── DEMO FLEET RECORDS ──
+        Ambulance(
+            id="amb-demo-001",
+            vehicle_number="LL-DEMO-AMB-001",
+            latitude=13.0425,
+            longitude=80.2410,
+            capability="ADVANCED",
+            equipment=["ventilator", "defibrillator", "oxygen", "cardiac_monitor", "trauma_kit"],
+            status="AVAILABLE",
+            eta_minutes=5.0,
+            is_demo=True,
+            demo_type="DEMO_FLEET_A",
+            last_gps_at=now,
+            created_at=now
+        ),
+        Ambulance(
+            id="amb-demo-002",
+            vehicle_number="LL-DEMO-AMB-002",
+            latitude=13.0305,
+            longitude=80.2250,
+            capability="BASIC",
+            equipment=["oxygen", "first_aid_kit", "stretcher", "splints"],
+            status="AVAILABLE",
+            eta_minutes=7.0,
+            is_demo=True,
+            demo_type="DEMO_FLEET_B",
             last_gps_at=now,
             created_at=now
         )
     ]
     for a in ambulances:
-        db.add(a)
+        db.merge(a)
 
-    # 2. Seed Registered Drivers
+    # 2. Seed Registered Drivers (Real & Demo)
     drivers = [
         Driver(
             id="drv-101",
@@ -130,6 +306,7 @@ def seed_database(db: Session, force_reset: bool = False):
             status="AVAILABLE",
             latitude=13.0080,
             longitude=80.2015,
+            is_demo=False,
             last_active_at=now,
             created_at=now
         ),
@@ -144,6 +321,7 @@ def seed_database(db: Session, force_reset: bool = False):
             status="AVAILABLE",
             latitude=13.0305,
             longitude=80.2250,
+            is_demo=False,
             last_active_at=now,
             created_at=now
         ),
@@ -156,14 +334,68 @@ def seed_database(db: Session, force_reset: bool = False):
             role="OPERATOR",
             assigned_ambulance_id=None,
             status="AVAILABLE",
+            is_demo=False,
+            last_active_at=now,
+            created_at=now
+        ),
+        # ── DEMO DRIVER ACCOUNTS ──
+        Driver(
+            id="drv-demo-001",
+            google_id="demo_goog_driver_a",
+            name="Demo Driver A",
+            email="demo.driver.a@lifeline.org",
+            phone="+91 98401 00001",
+            phone_verified=True,
+            otp_verified_at=now,
+            role="DRIVER",
+            assigned_ambulance_id="amb-demo-001",
+            status="AVAILABLE",
+            latitude=13.0425,
+            longitude=80.2410,
+            is_demo=True,
+            demo_type="DEMO_DRIVER_A",
+            last_active_at=now,
+            created_at=now
+        ),
+        Driver(
+            id="drv-demo-002",
+            google_id="demo_goog_driver_b",
+            name="Demo Driver B",
+            email="demo.driver.b@lifeline.org",
+            phone="+91 98401 00002",
+            phone_verified=True,
+            otp_verified_at=now,
+            role="DRIVER",
+            assigned_ambulance_id="amb-demo-002",
+            status="AVAILABLE",
+            latitude=13.0305,
+            longitude=80.2250,
+            is_demo=True,
+            demo_type="DEMO_DRIVER_B",
+            last_active_at=now,
+            created_at=now
+        ),
+        Driver(
+            id="staff-demo-001",
+            google_id="demo_goog_hospital_staff",
+            name="Demo ER Staff",
+            email="demo.hospital@lifeline.org",
+            phone="+91 98402 00001",
+            phone_verified=True,
+            otp_verified_at=now,
+            role="HOSPITAL_STAFF",
+            assigned_ambulance_id=None,
+            status="AVAILABLE",
+            is_demo=True,
+            demo_type="DEMO_STAFF",
             last_active_at=now,
             created_at=now
         )
     ]
     for d in drivers:
-        db.add(d)
+        db.merge(d)
 
-    # 3. Seed Hospitals (Simulated Demo Data with phone numbers for tel: calls)
+    # 3. Seed Hospitals (Real Facilities + Demo Hospital)
     hospitals = [
         Hospital(
             id="hosp-001",
@@ -180,6 +412,7 @@ def seed_database(db: Session, force_reset: bool = False):
             specialities=["Trauma Surgery", "Critical Care", "Cardiology", "Orthopedics"],
             status="OPEN",
             capacity_status="UNKNOWN",
+            is_demo=False,
             updated_at=now
         ),
         Hospital(
@@ -197,6 +430,7 @@ def seed_database(db: Session, force_reset: bool = False):
             specialities=["Emergency Medicine", "Neurotrauma", "Cardiology"],
             status="OPEN",
             capacity_status="UNKNOWN",
+            is_demo=False,
             updated_at=now
         ),
         Hospital(
@@ -214,6 +448,7 @@ def seed_database(db: Session, force_reset: bool = False):
             specialities=["Level 1 Trauma", "Burn Unit", "Neurosurgery", "Toxicology"],
             status="OPEN",
             capacity_status="UNKNOWN",
+            is_demo=False,
             updated_at=now
         ),
         Hospital(
@@ -231,6 +466,7 @@ def seed_database(db: Session, force_reset: bool = False):
             specialities=["General Medicine", "Pediatrics", "Minor Injury Care"],
             status="OPEN",
             capacity_status="UNKNOWN",
+            is_demo=False,
             updated_at=now
         ),
         Hospital(
@@ -248,11 +484,32 @@ def seed_database(db: Session, force_reset: bool = False):
             specialities=["Internal Medicine", "First Response Stabilization"],
             status="LIMITED",
             capacity_status="UNKNOWN",
+            is_demo=False,
+            updated_at=now
+        ),
+        # ── DEMO HOSPITAL RECORD ──
+        Hospital(
+            id="hosp-demo-001",
+            place_id="demo_place_lifeline_hospital",
+            name="LifeLine Demo Hospital",
+            latitude=13.0100,
+            longitude=80.2120,
+            address="Demo ER Ward, Grand Southern Trunk Rd, Chennai, Tamil Nadu 600044",
+            phone="+914422201000",
+            emergency_available=True,
+            trauma_capable=True,
+            icu_available=True,
+            available_beds=12,
+            specialities=["Level 1 Trauma", "Emergency Medicine", "Cardiac Care"],
+            status="OPEN",
+            capacity_status="DEMO",
+            is_demo=True,
+            demo_type="DEMO_HOSPITAL",
             updated_at=now
         )
     ]
     for h in hospitals:
-        db.add(h)
+        db.merge(h)
 
     # 4. Seed Road Incidents
     incidents = [
@@ -265,6 +522,7 @@ def seed_database(db: Session, force_reset: bool = False):
             description="Multi-vehicle collision near Anna Salai flyover lane",
             radius_meters=250,
             active=True,
+            is_demo=False,
             created_at=now
         ),
         RoadIncident(
@@ -276,6 +534,7 @@ def seed_database(db: Session, force_reset: bool = False):
             description="Metro rail phase-2 utility excavation",
             radius_meters=200,
             active=True,
+            is_demo=False,
             created_at=now
         ),
         RoadIncident(
@@ -287,11 +546,12 @@ def seed_database(db: Session, force_reset: bool = False):
             description="Severe seasonal waterlogging near Velachery lake bypass",
             radius_meters=400,
             active=True,
+            is_demo=False,
             created_at=now
         )
     ]
     for inc in incidents:
-        db.add(inc)
+        db.merge(inc)
 
     # 5. Seed Hero Demo Emergency with Session and Audit Event
     hero_emergency = Emergency(
@@ -306,10 +566,12 @@ def seed_database(db: Session, force_reset: bool = False):
         critical_patient_count=1,
         severity="CRITICAL",
         status="SEARCHING",
+        is_demo=True,
+        demo_type="HERO_DEMO",
         created_at=now - timedelta(minutes=5),
         updated_at=now
     )
-    db.add(hero_emergency)
+    db.merge(hero_emergency)
     db.flush()
 
     hero_session = EmergencySession(
@@ -321,10 +583,10 @@ def seed_database(db: Session, force_reset: bool = False):
         expires_at=now + timedelta(hours=2),
         is_active=True
     )
-    db.add(hero_session)
+    db.merge(hero_session)
     hero_emergency.session_id = hero_session.id
 
-    db.add(
+    db.merge(
         EmergencyEvent(
             id="evt-hero-001",
             emergency_id=hero_emergency.id,
@@ -334,6 +596,7 @@ def seed_database(db: Session, force_reset: bool = False):
             metadata_json={"session_code": "EMG-8F72A", "patient_count": 3, "severity": "CRITICAL"},
             latitude=hero_emergency.latitude,
             longitude=hero_emergency.longitude,
+            is_demo=True,
             created_at=now - timedelta(minutes=5)
         )
     )

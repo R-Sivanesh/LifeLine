@@ -50,6 +50,8 @@ export interface Emergency {
   assigned_ambulance_id?: string;
   assigned_driver_id?: string;
   assigned_hospital_id?: string;
+  is_demo?: boolean;
+  demo_type?: string;
   created_at?: string;
   updated_at?: string;
   session?: EmergencySession;
@@ -70,6 +72,8 @@ export interface LiveAmbulanceGPS {
   updated_at: number; // timestamp in ms or seconds
   source: 'LIVE_GPS' | 'DEMO_TELEMETRY' | string;
   freshness_status: 'LIVE' | 'STALE' | 'OFFLINE' | 'DEMO' | string;
+  is_demo?: boolean;
+  demo_type?: string;
   driver_id?: string;
   driver_name?: string;
 }
@@ -95,6 +99,8 @@ export interface AmbulanceRecommendation {
   status?: LiveAmbulanceStatus | string;
   updated_at?: number;
   freshness_status?: 'LIVE' | 'STALE' | 'OFFLINE' | 'DEMO' | string;
+  is_demo?: boolean;
+  demo_type?: string;
   driver_id?: string;
   driver_name?: string;
 }
@@ -110,6 +116,8 @@ export interface Ambulance {
   current_driver_id?: string;
   current_assignment_id?: string;
   eta_minutes: number;
+  is_demo?: boolean;
+  demo_type?: string;
   last_gps_at?: string;
 }
 
@@ -127,6 +135,8 @@ export interface Driver {
   status: LiveAmbulanceStatus;
   latitude?: number;
   longitude?: number;
+  is_demo?: boolean;
+  demo_type?: string;
   last_active_at?: string;
 }
 
@@ -178,6 +188,8 @@ export interface DriverAlertItem {
   latitude?: number;
   longitude?: number;
   description?: string;
+  is_demo?: boolean;
+  demo_type?: string;
 }
 
 export interface DriverAcceptResponse {
@@ -211,6 +223,8 @@ export interface NearbyHospitalItem {
   trauma_capable?: boolean | null;
   icu_available?: boolean | null;
   available_beds?: number | null;
+  is_demo?: boolean;
+  demo_type?: string;
 }
 
 export interface NearbyHospitalsResponse {
@@ -235,6 +249,8 @@ export interface Hospital {
   specialities: string[];
   status: HospitalStatus;
   capacity_status?: string;
+  is_demo?: boolean;
+  demo_type?: string;
 }
 
 export interface HospitalRecommendation {

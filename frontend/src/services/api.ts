@@ -254,6 +254,27 @@ export const lifelineApi = {
     return res.data;
   },
 
+  // Demo Authentication & Environment Status
+  getDemoStatus: async (): Promise<{ demo_mode: boolean }> => {
+    try {
+      const res = await api.get('/auth/demo-status');
+      return res.data;
+    } catch {
+      return { demo_mode: import.meta.env.VITE_DEMO_MODE !== 'false' };
+    }
+  },
+
+  demoLogin: async (data: { role: string; demo_id: string }): Promise<DriverAuthResponse> => {
+    const res = await api.post('/auth/demo-login', data);
+    if (res.data?.token) {
+      localStorage.setItem('lifeline_driver_token', res.data.token);
+      if (res.data.driver) {
+        localStorage.setItem('lifeline_driver_profile', JSON.stringify(res.data.driver));
+      }
+    }
+    return res.data;
+  },
+
   // Driver Authentication & Management
   driverGoogleLogin: async (data: {
     email: string;

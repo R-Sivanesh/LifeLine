@@ -32,11 +32,14 @@ export const HomePage: React.FC = () => {
   const [activeOptimization, setActiveOptimization] = useState<OptimizationResult | null>(null);
   const [isPatientFlowActive, setIsPatientFlowActive] = useState<boolean>(false);
   const [selectedIncidentType, setSelectedIncidentType] = useState<string | undefined>(undefined);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(true);
 
   // ════════════════════════════════════════════════════════════
   // 1. STARTUP DECISION TREE: CHECK & RESTORE PATIENT SESSION
   // ════════════════════════════════════════════════════════════
   useEffect(() => {
+    lifelineApi.getDemoStatus().then(res => setIsDemoMode(res.demo_mode)).catch(() => setIsDemoMode(true));
+
     const checkActiveSessionOnStartup = async () => {
       try {
         const savedSession = localStorage.getItem('lifeline_patient_session');
@@ -282,6 +285,11 @@ export const HomePage: React.FC = () => {
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">
                         Google + OTP
                       </span>
+                      {isDemoMode && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold">
+                          Demo Driver
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-zinc-300 font-medium mt-1">
                       Respond to emergency requests
@@ -309,6 +317,11 @@ export const HomePage: React.FC = () => {
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
                         Google + OTP
                       </span>
+                      {isDemoMode && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-500/40 font-bold">
+                          Demo Hospital
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-zinc-300 font-medium mt-1">
                       Manage incoming emergencies
