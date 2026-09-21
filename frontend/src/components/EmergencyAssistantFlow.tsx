@@ -388,8 +388,14 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
           <span>Back</span>
         </button>
 
-        <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400">
-          <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
+          <div className="relative h-6 w-6 rounded-full bg-zinc-950 border border-zinc-700/80 p-0.5 flex items-center justify-center shadow-md shadow-red-500/20 shrink-0">
+            <img
+              src="/logo-clean.png"
+              alt="LifeLine"
+              className="h-full w-full object-contain drop-shadow-[0_0_6px_rgba(239,68,68,0.4)]"
+            />
+          </div>
           <span className="text-white font-bold tracking-wider">EMERGENCY ASSISTANT</span>
         </div>
 
@@ -785,8 +791,15 @@ export const EmergencyAssistantFlow: React.FC<EmergencyAssistantFlowProps> = ({
       {/* ========================================================================= */}
       {currentStep === 'ANALYZING' && (
         <div className="space-y-6 py-8 text-center animate-fadeIn">
-          <div className="h-16 w-16 mx-auto rounded-2xl bg-red-950/70 border border-red-500/50 flex items-center justify-center text-red-400 shadow-2xl shadow-red-600/30">
-            <RefreshCw className="h-8 w-8 animate-spin" />
+          <div className="relative h-20 w-20 mx-auto flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-2 border-red-500/30 border-t-red-500 border-r-cyan-400 animate-spin" />
+            <div className="h-16 w-16 rounded-full bg-zinc-950 border border-zinc-700/80 p-1 flex items-center justify-center shadow-2xl shadow-red-600/30">
+              <img
+                src="/logo-clean.png"
+                alt="LifeLine Calculating"
+                className="h-full w-full object-contain drop-shadow-[0_0_12px_rgba(6,182,212,0.4)]"
+              />
+            </div>
           </div>
 
           <div>

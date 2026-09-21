@@ -179,8 +179,12 @@ export const DispatcherChat: React.FC<DispatcherChatProps> = ({
       {/* Dispatcher Console Header */}
       <div className="p-3 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded bg-red-950/80 border border-red-500/40 flex items-center justify-center text-red-400">
-            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+          <div className="relative h-7 w-7 rounded-full bg-zinc-950 border border-zinc-700/80 p-0.5 flex items-center justify-center shadow-md shadow-red-500/20 shrink-0">
+            <img
+              src="/logo-clean.png"
+              alt="LifeLine Dispatch AI"
+              className="h-full w-full object-contain drop-shadow-[0_0_6px_rgba(239,68,68,0.4)]"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">

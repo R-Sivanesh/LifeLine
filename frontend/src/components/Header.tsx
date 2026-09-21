@@ -23,8 +23,12 @@ export const Header: React.FC<HeaderProps> = ({ onResetDemo, isResetting }) => {
         {/* Brand & Status */}
         <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="h-9 w-9 rounded-lg bg-red-600/20 border border-red-500/50 flex items-center justify-center text-red-500 shadow-lg shadow-red-500/10 group-hover:border-red-400 transition-all">
-              <Activity className="h-5 w-5 animate-pulse" />
+            <div className="relative h-9 w-9 rounded-full bg-zinc-950 border border-zinc-700/80 p-0.5 flex items-center justify-center shadow-lg shadow-red-500/10 group-hover:border-red-500/60 transition-all shrink-0">
+              <img
+                src="/logo-clean.png"
+                alt="LifeLine Logo"
+                className="h-full w-full object-contain drop-shadow-[0_0_8px_rgba(239,68,68,0.35)]"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">

@@ -241,9 +241,13 @@ export const OperationsPage: React.FC = () => {
       <header className="border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md px-4 lg:px-6 py-3 sticky top-0 z-40">
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 max-w-[1700px] mx-auto w-full">
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-            <Link to="/" className="flex items-center gap-2 group">
-              <div className="h-8 w-8 rounded-lg bg-red-600/20 border border-red-500/50 flex items-center justify-center text-red-500">
-                <Activity className="h-4 w-4 animate-pulse" />
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <div className="relative h-8 w-8 rounded-full bg-zinc-950 border border-zinc-700/80 p-0.5 flex items-center justify-center shadow-lg shadow-red-500/10 group-hover:border-red-500/60 transition-all shrink-0">
+                <img
+                  src="/logo-clean.png"
+                  alt="LifeLine Logo"
+                  className="h-full w-full object-contain drop-shadow-[0_0_8px_rgba(239,68,68,0.35)]"
+                />
               </div>
               <div>
                 <div className="flex items-center gap-2">

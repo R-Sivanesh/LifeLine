@@ -219,8 +219,12 @@ export const AmbulanceTrackerPage: React.FC = () => {
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-cyan-950 border border-cyan-500/40 flex items-center justify-center text-2xl shadow-lg">
-                🚑
+              <div className="relative h-12 w-12 rounded-2xl bg-zinc-950 border border-cyan-500/40 p-1 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
+                <img
+                  src="/logo-clean.png"
+                  alt="LifeLine Logo"
+                  className="h-full w-full object-contain drop-shadow-[0_0_10px_rgba(6,182,212,0.4)]"
+                />
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">

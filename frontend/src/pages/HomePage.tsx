@@ -41,8 +41,12 @@ export const HomePage: React.FC = () => {
         <div className="px-4 py-3 flex items-center justify-between gap-2 max-w-lg mx-auto">
           {/* Brand */}
           <div className="flex items-center gap-2.5 shrink-0">
-            <div className="h-9 w-9 rounded-xl bg-red-600/20 border border-red-500/50 flex items-center justify-center shadow-lg shadow-red-600/20">
-              <Activity className="h-5 w-5 text-red-500 animate-pulse" />
+            <div className="relative h-9 w-9 rounded-full bg-zinc-950 border border-zinc-700/80 p-0.5 flex items-center justify-center shadow-lg shadow-red-600/20 shrink-0">
+              <img
+                src="/logo-clean.png"
+                alt="LifeLine"
+                className="h-full w-full object-contain drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+              />
             </div>
             <div>
               <span className="font-black tracking-wider text-sm text-white font-mono leading-none">LIFELINE</span>
@@ -98,7 +102,18 @@ export const HomePage: React.FC = () => {
               {/* Ambient glow */}
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-40 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="relative space-y-2">
+              <div className="relative space-y-3">
+                {/* Brand Visual Logo */}
+                <div className="flex justify-center mb-1">
+                  <div className="relative h-20 w-20 sm:h-24 sm:w-24 rounded-full bg-zinc-950/90 p-1 border border-zinc-700/80 shadow-2xl shadow-red-600/25">
+                    <img
+                      src="/logo-clean.png"
+                      alt="LifeLine Emergency Assistance"
+                      className="h-full w-full object-contain drop-shadow-[0_0_16px_rgba(6,182,212,0.4)]"
+                    />
+                  </div>
+                </div>
+
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-950/80 border border-red-500/50 text-red-400 text-xs font-mono font-bold">
                   <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
                   <span>24/7 EMERGENCY RESPONSE</span>
