@@ -27,25 +27,30 @@ CORE PROTOCOLS:
    - "UNKNOWN": Non-emergency gibberish.
 
 2. GREETINGS & CASUAL TALK:
-   - For "hi", "hello", etc., DO NOT say "Information received" or "Ready to optimize".
-   - DO NOT set "has_sufficient_information": true.
+   - For "hi", "hello", etc., reply: "Hi. I'm LifeLine Dispatch AI. If this is an emergency, tell me what happened and where."
+   - DO NOT set "has_sufficient_information": true for casual greetings.
    - DO NOT invent an incident type or location.
-   - Reply warmly and directly: "Hi. I'm LifeLine Dispatch AI. If this is an emergency, tell me what happened and where."
 
-3. EMERGENCY INTAKE CONVERSATION FLOW:
-   - Ask ONLY ONE focused question at a time.
-   - Priority:
-     1. Incident nature (accident, cardiac, stroke, fire, trauma)
-     2. Location / landmark / street
-     3. Immediate life-threat (unconscious / non-responsive / severe bleeding / cardiac arrest)
-     4. Patient count
-     5. Road passability (blocked / open)
+3. ADAPTIVE FACT EXTRACTION (CRITICAL):
+   - ALWAYS extract all facts already stated in the user message:
+     * incident_type (ROAD_ACCIDENT, CARDIAC_ARREST, STROKE, FIRE_BURN, TRAUMA_INJURY, RESPIRATORY_DISTRESS, MEDICAL_EMERGENCY)
+     * location_mentioned (e.g. Pondy Beach, Tambaram Bridge, Chromepet)
+     * patient_count (number of people injured/affected)
+     * injury_reported (true if injury/hurt mentioned)
+     * bleeding_reported (true if bleeding/blood mentioned)
+     * is_unconscious (true if unconscious/unresponsive mentioned, false if conscious/awake, null if unknown)
+     * severity (CRITICAL, HIGH, MEDIUM, LOW - derived ONLY from reported facts, not clinical diagnosis)
+   - NEVER ask for information that the user has ALREADY provided.
+     Example: If user says "Car crash at Pondy Beach, 2 people injured and one is bleeding", incident type is ROAD_ACCIDENT and location is Pondy Beach. DO NOT ask "What type of emergency is occurring?"!
+   - If something essential is genuinely missing, ask ONLY ONE focused question.
+     Example: If user says "There was an accident near the bridge", incident is known, location is known, but patient count is missing. Ask: "How many people are injured?" with quick replies ["1", "2", "3", "4+", "Not Sure"].
 
 4. SUFFICIENT INFORMATION CRITERIA:
-   - Set "has_sufficient_information": true ONLY WHEN both:
-     a) Incident type is known (e.g. ROAD_ACCIDENT, CARDIAC_ARREST)
-     b) Location is known (either provided in message or already confirmed in state)
-   - If location or incident type is missing, "has_sufficient_information" MUST BE false.
+   - Set "has_sufficient_information": true WHEN:
+     a) Incident type is known
+     b) Location is known (either provided in message, confirmed GPS, or location_description)
+     c) Patient count is known or estimated
+   - If incident type or location is completely unknown, "has_sufficient_information" must be false.
 
 5. TAMIL / TANGLISH COMPREHENSION:
    - "accident aachu" = ROAD_ACCIDENT
@@ -53,6 +58,7 @@ CORE PROTOCOLS:
    - "road block aagiduchu" = BLOCKED
    - "bridge pakkam" = near the bridge
    - "3 per injured" = 3 patients injured
+   - "ratham varudhu" = bleeding reported
    Normalize all structured values to English.
 
 6. JSON OUTPUT FORMAT: Return ONLY valid JSON matching this exact structure:
@@ -68,7 +74,11 @@ CORE PROTOCOLS:
     "severity": "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
     "patient_count": integer (>=1) or null,
     "critical_patient_count": integer (>=0) or null,
+    "injury_reported": boolean or null,
+    "bleeding_reported": boolean or null,
+    "is_unconscious": boolean or null,
     "location_description": "string" or null,
+    "location_mentioned": "string" or null,
     "road_passability": "PASSABLE" | "PARTIAL" | "BLOCKED" | "UNKNOWN" | null,
     "special_requirements": ["string", ...],
     "confidence": float (0.0 to 1.0)
@@ -88,7 +98,7 @@ def fallback_dispatcher_rule_engine(
 ) -> Dict[str, Any]:
     """
     Deterministic rule-based conversational dispatcher with multi-intent classification,
-    state machine, Tanglish support, and zero-false-decision guarantee.
+    fact extraction, adaptive question selection, Tanglish support, and zero false decisions.
     """
     msg_clean = message.strip()
     msg_lower = msg_clean.lower()
@@ -97,6 +107,7 @@ def fallback_dispatcher_rule_engine(
     # Pull existing state
     prev_type = current_state.incident_type if current_state else None
     prev_loc = current_state.location_description if current_state else None
+    prev_loc_mentioned = current_state.location_mentioned if current_state else None
     prev_patient_count = current_state.patient_count if current_state else None
     prev_crit_count = current_state.critical_patient_count if current_state else None
     prev_road = current_state.road_passability if current_state else None
@@ -109,7 +120,7 @@ def fallback_dispatcher_rule_engine(
     has_emergency_keyword = any(k in msg_lower for k in [
         "accident", "collision", "crash", "hit and run", "run over", "vehicle", "car", "bike", "truck", "lorry", "bus",
         "accident aachu", "heart attack", "cardiac", "chest pain", "pulse", "collapsed", "stroke", "paralysis", "slurred speech",
-        "fire", "burn", "explosion", "thee", "fall", "fracture", "broken bone", "bleeding", "unconscious", "unresponsive", "injured"
+        "fire", "burn", "explosion", "thee", "fall", "fracture", "broken bone", "bleeding", "blood", "unconscious", "unresponsive", "injured", "hurt"
     ])
 
     if is_greeting_exact and not has_emergency_keyword and not prev_type:
@@ -125,7 +136,11 @@ def fallback_dispatcher_rule_engine(
                 "severity": "MEDIUM",
                 "patient_count": None,
                 "critical_patient_count": None,
+                "injury_reported": None,
+                "bleeding_reported": None,
+                "is_unconscious": None,
                 "location_description": prev_loc,
+                "location_mentioned": prev_loc_mentioned,
                 "road_passability": None,
                 "special_requirements": [],
                 "confidence": 0.0
@@ -146,7 +161,11 @@ def fallback_dispatcher_rule_engine(
                 "severity": "LOW",
                 "patient_count": None,
                 "critical_patient_count": None,
+                "injury_reported": None,
+                "bleeding_reported": None,
+                "is_unconscious": None,
                 "location_description": prev_loc,
+                "location_mentioned": prev_loc_mentioned,
                 "road_passability": None,
                 "special_requirements": [],
                 "confidence": 0.0
@@ -155,7 +174,7 @@ def fallback_dispatcher_rule_engine(
 
     # 3. Emergency & Incident Type Parsing
     incident_type = prev_type
-    if any(k in msg_lower for k in ["collision", "accident", "crash", "hit and run", "run over", "vehicle", "car", "bike", "truck", "accident aachu", "road accident"]):
+    if any(k in msg_lower for k in ["collision", "accident", "crash", "hit and run", "run over", "vehicle", "car", "bike", "truck", "lorry", "bus", "accident aachu", "road accident"]):
         incident_type = "ROAD_ACCIDENT"
     elif any(k in msg_lower for k in ["heart attack", "cardiac", "cardiac arrest", "chest pain", "pulse", "collapsed"]):
         incident_type = "CARDIAC_ARREST"
@@ -170,101 +189,123 @@ def fallback_dispatcher_rule_engine(
     elif has_emergency_keyword and not incident_type:
         incident_type = "MEDICAL_EMERGENCY"
 
-    # 4. Patient Counts
+    # 4. Patient Counts (Explicit Extraction)
     patient_count = prev_patient_count
     num_map = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "oru": 1, "rendu": 2, "moonu": 3, "naalu": 4}
     
-    pat_matches = re.findall(r'(\d+|one|two|three|four|five|six|seven|eight|nine|ten|oru|rendu|moonu|naalu)\s+(?:people|persons|patients|injured|victims|casualties|per)', msg_lower)
+    # Check "2 people injured", "two people", "3 patients", "2 hurt", "2 injured", "1 unconscious"
+    pat_matches = re.findall(r'(\d+|one|two|three|four|five|six|seven|eight|nine|ten|oru|rendu|moonu|naalu)\s+(?:people|persons|patients|injured|hurt|victims|casualties|per|unconscious|bleeding)', msg_lower)
     if pat_matches:
         v = pat_matches[0]
         patient_count = int(v) if v.isdigit() else num_map.get(v, 1)
-    elif patient_count is None and incident_type is not None:
+    elif msg_lower in ["1", "2", "3", "4", "4+", "one", "two", "three", "four", "1 person", "2 people", "3 people", "4+ people"]:
+        clean_num = msg_lower.replace("+", "").split()[0]
+        patient_count = int(clean_num) if clean_num.isdigit() else num_map.get(clean_num, 1)
+    elif "not sure" in msg_lower or "unsure" in msg_lower:
         patient_count = 1
 
-    # 5. Critical Count & Consciousness
+    # 5. Injury & Bleeding Detection
+    injury_reported = any(k in msg_lower for k in ["injured", "hurt", "injury", "fracture", "broken bone", "wound", "cut", "burn", "gaya"])
+    bleeding_reported = any(k in msg_lower for k in ["bleeding", "blood", "heavy bleeding", "raththathoda", "ratham", "bleed"])
+
+    # 6. Critical Count & Consciousness
     critical_count = prev_crit_count if prev_crit_count is not None else 0
+    is_unconscious = None
     if any(k in msg_lower for k in ["unconscious", "not responding", "unresponsive", "critical", "severe bleeding", "no pulse", "cardiac arrest", "not breathing", "oru aal unconscious"]):
-        crit_matches = re.findall(r'(\d+|one|two|three|four|five|oru|rendu)\s+(?:person|patient|victim|people|aal)?\s*(?:is|are)?\s*(?:unconscious|unresponsive|critical|not responding)', msg_lower)
+        is_unconscious = True
+        crit_matches = re.findall(r'(\d+|one|two|three|four|five|oru|rendu)\s+(?:person|patient|victim|people|aal)?\s*(?:is|are)?\s*(?:unconscious|unresponsive|critical|not responding|bleeding)', msg_lower)
         if crit_matches:
             v = crit_matches[0]
             critical_count = int(v) if v.isdigit() else num_map.get(v, 1)
         else:
             critical_count = 1
-    elif any(k in msg_lower for k in ["conscious", "talking", "awake", "stable", "minor"]):
+    elif any(k in msg_lower for k in ["conscious", "talking", "awake", "stable", "all conscious", "minor"]):
+        is_unconscious = False
         critical_count = 0
+    elif bleeding_reported:
+        # If bleeding is explicitly reported, count at least 1 critical/urgent patient
+        critical_count = max(critical_count, 1)
 
-    # 6. Road Passability
+    # If critical count was identified or single medical emergency, infer patient count
+    if patient_count is None:
+        if critical_count > 0:
+            patient_count = max(critical_count, 1)
+        elif incident_type in ["CARDIAC_ARREST", "STROKE", "RESPIRATORY_DISTRESS"]:
+            patient_count = 1
+
+    # 7. Road Passability
     road_passability = prev_road
     if any(k in msg_lower for k in ["block", "blocked", "jam", "closed", "traffic jam", "waterlogging", "road block", "block aagiduchu"]):
         road_passability = "BLOCKED"
     elif any(k in msg_lower for k in ["clear", "open", "passable", "moving"]):
         road_passability = "PASSABLE"
 
-    # 7. Severity
+    # 8. Severity (Derived strictly from reported facts, not medical diagnosis)
     severity = "MEDIUM"
-    if critical_count > 0 or (incident_type in ["CARDIAC_ARREST", "STROKE"]) or any(k in msg_lower for k in ["unconscious", "cardiac arrest", "severe head injury", "heavy bleeding", "massive crash", "not breathing", "critical"]):
+    if critical_count > 0 or (incident_type in ["CARDIAC_ARREST", "STROKE"]) or is_unconscious is True or bleeding_reported or any(k in msg_lower for k in ["unconscious", "cardiac arrest", "severe head injury", "heavy bleeding", "massive crash", "not breathing", "critical"]):
         severity = "CRITICAL"
-    elif (patient_count and patient_count >= 3) or incident_type == "FIRE_BURN" or any(k in msg_lower for k in ["major accident", "deep cut", "burn", "chest pain", "serious"]):
+    elif (patient_count and patient_count >= 3) or incident_type == "FIRE_BURN" or injury_reported or any(k in msg_lower for k in ["major accident", "deep cut", "burn", "chest pain", "serious"]):
         severity = "HIGH"
     elif any(k in msg_lower for k in ["minor", "stable", "conscious", "scratch", "small cut"]):
         severity = "LOW"
 
-    # 8. Location Extraction
+    # 9. Location Mention Extraction
     location_desc = prev_loc
-    # Check "bridge pakkam" or "[place] pakkam"
+    location_mentioned = prev_loc_mentioned
+
     pakkam_match = re.search(r'([a-zA-Z0-9\s]{3,30})\s+pakkam', msg_lower)
     if pakkam_match:
         extracted = pakkam_match.group(1).strip()
         if extracted not in ["accident", "oru", "anna"]:
-            location_desc = f"{extracted.title()} Area"
-    
-    if not location_desc or location_desc == prev_loc:
+            location_mentioned = f"{extracted.title()} Area"
+            location_desc = location_mentioned
+
+    if not location_mentioned or location_desc == prev_loc:
         loc_match = re.search(r'(?:near|at|on|around|by|in)\s+([a-zA-Z0-9\s]{3,40})(?:\.|\,|$)', msg_lower)
         if loc_match:
             extracted = loc_match.group(1).strip()
-            # Ensure it's not a common non-location phrase
-            if extracted not in ["the road", "the car", "the spot", "an accident", "trouble", "pain"]:
-                location_desc = extracted.title()
+            # Strip trailing non-location words if present
+            extracted = re.sub(r'\s+(?:two|2|three|3|one|1|people|injured|and|with|severe|critical|one is|is bleeding|bleeding).*$', '', extracted).strip()
+            if extracted and extracted not in ["the road", "the car", "the spot", "an accident", "trouble", "pain", "the scene"]:
+                location_mentioned = extracted.title()
+                location_desc = location_mentioned
 
     has_loc = location_confirmed or (location_desc is not None and len(location_desc.strip()) > 2)
 
-    # 9. Determine Missing Fields & Sufficiency
+    # 10. Missing Fields & Adaptive Single-Question Selection
     missing = []
     if not incident_type:
         missing.append("incident_type")
-    if not has_loc:
-        missing.append("location")
     if patient_count is None:
         missing.append("patient_count")
-    if critical_count == 0 and severity == "MEDIUM" and not any(k in msg_lower for k in ["conscious", "awake", "unconscious", "unresponsive"]):
-        missing.append("consciousness_status")
+    if not has_loc and not location_mentioned:
+        missing.append("location")
 
-    # Sufficiency rule: Incident type AND Location MUST be known.
-    has_sufficient = (incident_type is not None) and has_loc
+    # Sufficiency: Incident type is known AND (location is confirmed or mentioned) AND (patient_count is known or defaultable)
+    has_sufficient = (incident_type is not None) and (has_loc or location_mentioned is not None) and (patient_count is not None)
 
-    # Determine state & next focused question
+    # Determine adaptive question
     suggested_quick_replies: List[str] = []
     
     if not incident_type:
         conv_state = "COLLECTING_INCIDENT"
         reply = "What type of emergency is occurring (e.g. road accident, cardiac arrest, fall, fire)?"
         suggested_quick_replies = ["Road Accident", "Cardiac Emergency", "Severe Injury", "Fire Emergency"]
-    elif not has_loc:
+    elif patient_count is None:
+        conv_state = "COLLECTING_PATIENT_COUNT"
+        reply = "How many people are injured or affected?"
+        suggested_quick_replies = ["1", "2", "3", "4+", "Not Sure"]
+    elif not has_loc and not location_mentioned:
         conv_state = "COLLECTING_LOCATION"
         reply = "Where is the exact location or nearest landmark?"
-        suggested_quick_replies = ["Use My GPS Location", "Near Tambaram Bridge", "Near Chromepet Signal", "Near Guindy Station"]
-    elif "consciousness_status" in missing and len(history) <= 2:
-        conv_state = "COLLECTING_CRITICAL_STATUS"
-        reply = "Is anyone unconscious or non-responsive at the scene?"
-        suggested_quick_replies = ["Yes, 1 unconscious", "No, all conscious", "Unsure / Checking"]
-    elif road_passability is None and len(history) <= 3:
-        conv_state = "COLLECTING_ROAD_ACCESS"
-        reply = "Is the road clear or blocked by traffic/debris?"
-        suggested_quick_replies = ["Road is clear", "Road is blocked / jammed"]
+        suggested_quick_replies = ["Use My Current GPS", "Search Landmark / Address"]
     else:
         conv_state = "INFORMATION_SUFFICIENT"
-        reply = f"Information received for {incident_type.replace('_', ' ').title()}. Ready to calculate optimal response."
-        suggested_quick_replies = ["Find Best Response", "Add Patient Details", "Road is Blocked"]
+        has_sufficient = True
+        loc_str = f" at {location_mentioned}" if location_mentioned else ""
+        pat_str = f" ({patient_count} affected)" if patient_count else ""
+        reply = f"Emergency details confirmed for {incident_type.replace('_', ' ').title()}{loc_str}{pat_str}. Ready to dispatch verified response."
+        suggested_quick_replies = ["Request Emergency Assistance", "Add Critical Detail"]
 
     # Special requirements
     special_reqs = []
@@ -286,9 +327,13 @@ def fallback_dispatcher_rule_engine(
         "structured_state": {
             "incident_type": incident_type,
             "severity": severity,
-            "patient_count": patient_count or 1,
+            "patient_count": patient_count if patient_count is not None else 1,
             "critical_patient_count": critical_count,
+            "injury_reported": injury_reported,
+            "bleeding_reported": bleeding_reported,
+            "is_unconscious": is_unconscious,
             "location_description": location_desc or ("Confirmed Location" if location_confirmed else None),
+            "location_mentioned": location_mentioned,
             "road_passability": road_passability or "PASSABLE",
             "special_requirements": special_reqs,
             "confidence": 0.95 if has_sufficient else 0.50
@@ -307,7 +352,7 @@ async def process_dispatcher_chat(
 ) -> ChatResponse:
     """
     Core conversational intake dispatcher powered by Google Gemini (with deterministic rule-engine fallback).
-    Guarantees zero false decisions and accurate intent classification.
+    Guarantees zero false decisions, accurate intent classification, and adaptive single-question intake.
     """
     conv_id = conversation_id or f"conv-{str(uuid.uuid4())[:8]}"
     msg_history = history or []
@@ -333,7 +378,7 @@ async def process_dispatcher_chat(
     msg_words = set(re.findall(r'\b[a-zA-Z]+\b', message.strip().lower()))
     is_simple_greeting = message.strip().lower() in GREETING_WORDS or (len(msg_words) <= 2 and bool(msg_words & GREETING_WORDS))
 
-    if not is_simple_greeting and api_key and api_key != "your_gemini_api_key_here":
+    if not is_simple_greeting and api_key and api_key != "your_gemini_api_key_here" and not api_key.startswith("your_"):
         try:
             # Prepare Gemini prompt contents
             gemini_messages = []
@@ -409,7 +454,11 @@ async def process_dispatcher_chat(
         severity=st_raw.get("severity", "MEDIUM"),
         patient_count=st_raw.get("patient_count"),
         critical_patient_count=st_raw.get("critical_patient_count"),
+        injury_reported=st_raw.get("injury_reported"),
+        bleeding_reported=st_raw.get("bleeding_reported"),
+        is_unconscious=st_raw.get("is_unconscious"),
         location_description=st_raw.get("location_description"),
+        location_mentioned=st_raw.get("location_mentioned"),
         location_confirmed=loc_confirmed,
         latitude=latitude or stored.get("latitude"),
         longitude=longitude or stored.get("longitude"),
@@ -417,7 +466,7 @@ async def process_dispatcher_chat(
         accuracy_meters=accuracy_meters or stored.get("accuracy_meters"),
         road_passability=st_raw.get("road_passability"),
         special_requirements=st_raw.get("special_requirements", []),
-        confidence=float(st_raw.get("confidence", 0.85 if has_sufficient else 0.0)),
+        confidence=float(st_raw.get("confidence", 0.95 if has_sufficient else 0.50)),
         missing_information=result_data.get("missing_information", []),
         has_sufficient_information=has_sufficient
     )

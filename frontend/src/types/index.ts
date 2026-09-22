@@ -400,7 +400,11 @@ export interface EmergencyDispatcherState {
   severity?: Severity | null;
   patient_count?: number | null;
   critical_patient_count?: number | null;
+  injury_reported?: boolean | null;
+  bleeding_reported?: boolean | null;
+  is_unconscious?: boolean | null;
   location_description?: string | null;
+  location_mentioned?: string | null;
   location_confirmed?: boolean | null;
   latitude?: number | null;
   longitude?: number | null;

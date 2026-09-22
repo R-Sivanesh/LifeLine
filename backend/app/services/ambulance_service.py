@@ -12,6 +12,7 @@ _LIVE_AMBULANCE_POOL: Dict[str, Dict[str, Any]] = {}
 
 STALE_THRESHOLD_SECONDS = 30.0
 OFFLINE_THRESHOLD_SECONDS = 60.0
+MAX_DISPATCH_RADIUS_KM = 35.0
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculates great-circle distance between two points in kilometers."""
@@ -112,6 +113,8 @@ def rank_live_ambulances(
         amb_id = amb.get("id", "amb-live")
         
         dist_km = calculate_haversine_distance(emergency.latitude, emergency.longitude, lat, lon)
+        if dist_km > MAX_DISPATCH_RADIUS_KM:
+            continue
         eta = estimate_ambulance_eta(dist_km)
         
         reasons: List[str] = []
@@ -190,6 +193,8 @@ def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[A
             continue
 
         dist_km = calculate_haversine_distance(emergency.latitude, emergency.longitude, amb.latitude, amb.longitude)
+        if not is_demo_emergency and dist_km > MAX_DISPATCH_RADIUS_KM:
+            continue
         eta = estimate_ambulance_eta(dist_km)
         
         reasons: List[str] = []
@@ -261,7 +266,7 @@ def rank_ambulances(ambulances: List[Ambulance], emergency: Emergency) -> List[A
                 status=amb.status,
                 updated_at=time.time() * 1000.0,
                 freshness_status="DEMO" if getattr(amb, "is_demo", False) else "LIVE",
-                is_demo=getattr(amb, "is_demo", False),
+                is_demo=bool(getattr(amb, "is_demo", False)),
                 demo_type=getattr(amb, "demo_type", None)
             )
         )

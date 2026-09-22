@@ -1,4 +1,5 @@
 import asyncio
+import time
 import logging
 from typing import List, Dict, Any, Tuple, Optional
 from app.models import Emergency, Ambulance, Hospital, RoadIncident
@@ -15,7 +16,12 @@ from app.schemas import (
 from app.services.ambulance_service import (
     rank_ambulances,
     rank_live_ambulances,
-    get_live_ambulances_list
+    get_live_ambulances_list,
+    _LIVE_AMBULANCE_POOL,
+    evaluate_telemetry_freshness,
+    calculate_haversine_distance,
+    estimate_ambulance_eta,
+    MAX_DISPATCH_RADIUS_KM
 )
 from app.services.hospital_service import rank_hospitals, rank_real_places_hospitals
 from app.services.google_routes_service import compute_google_routes
@@ -34,49 +40,129 @@ async def run_golden_minute_optimization(
     Evaluates combinations of available real GPS-tracked ambulances (or demo ambulances in demo mode),
     real receiving hospitals from Google Places, and computed routes to minimize the total estimated response-to-care time.
     """
-    # 1. Check for real connected GPS ambulances
-    live_items = get_live_ambulances_list()
-    live_dict_list = [item.model_dump() for item in live_items]
+    # 1. Determine Assigned or Available Ambulance
+    from app.services.ambulance_service import (
+        _LIVE_AMBULANCE_POOL,
+        evaluate_telemetry_freshness,
+        calculate_haversine_distance,
+        estimate_ambulance_eta
+    )
     
     top_amb: Optional[AmbulanceRecommendation] = None
     has_live_amb = False
     no_amb_reason: Optional[str] = None
-    ambulance_source = "DEMO_TELEMETRY"
-    ambulance_status_str = "DEMO"
-    
-    if live_dict_list:
-        live_ranked = rank_live_ambulances(live_dict_list, emergency)
-        # Only select ambulances that have fresh GPS (LIVE) and AVAILABLE status
-        available_live = [a for a in live_ranked if a.freshness_status == "LIVE" and a.status == "AVAILABLE"]
-        if available_live:
-            top_amb = available_live[0]
-            has_live_amb = True
-            ambulance_source = "LIVE_GPS"
-            ambulance_status_str = "LIVE"
-            
-            # Compute live route from Ambulance GPS -> Emergency Scene
-            try:
-                amb_origin = Coordinate(latitude=top_amb.latitude, longitude=top_amb.longitude)
-                emg_dest = Coordinate(latitude=emergency.latitude, longitude=emergency.longitude)
-                amb_routes, _, _ = await compute_google_routes(amb_origin, emg_dest, "TRAFFIC_AWARE")
-                if amb_routes and len(amb_routes) > 0:
-                    top_amb.eta_minutes = amb_routes[0].adjusted_eta_minutes
-                    top_amb.distance_km = amb_routes[0].distance_km
-            except Exception as e:
-                logger.warning(f"Failed to calculate exact route for ambulance GPS: {e}")
+    ambulance_source = "NONE"
+    ambulance_status_str = "UNKNOWN"
+    is_demo_emergency = bool(getattr(emergency, "is_demo", False))
+    assigned_amb_id = getattr(emergency, "assigned_ambulance_id", None)
 
-    # If no live ambulance, check demo mode or database fallback
-    if not top_amb:
-        if settings.DEMO_MODE or len(ambulances) > 0:
+    if assigned_amb_id:
+        # Case A: Emergency has an authoritative assigned ambulance
+        if assigned_amb_id in _LIVE_AMBULANCE_POOL:
+            amb_data = _LIVE_AMBULANCE_POOL[assigned_amb_id]
+            freshness, age_sec = evaluate_telemetry_freshness(amb_data.get("updated_at", 0))
+            lat = amb_data.get("latitude", 0.0)
+            lon = amb_data.get("longitude", 0.0)
+            dist_km = calculate_haversine_distance(emergency.latitude, emergency.longitude, lat, lon)
+            
+            eta = estimate_ambulance_eta(dist_km)
+            # Compute live route if GPS is fresh
+            if freshness == "LIVE":
+                try:
+                    amb_origin = Coordinate(latitude=lat, longitude=lon)
+                    emg_dest = Coordinate(latitude=emergency.latitude, longitude=emergency.longitude)
+                    amb_routes, _, _ = await compute_google_routes(amb_origin, emg_dest, "TRAFFIC_AWARE")
+                    if amb_routes and len(amb_routes) > 0:
+                        eta = amb_routes[0].adjusted_eta_minutes
+                        dist_km = amb_routes[0].distance_km
+                except Exception as e:
+                    logger.warning(f"Failed to calculate exact route for assigned ambulance: {e}")
+            
+            ambulance_source = "LIVE_GPS" if freshness == "LIVE" else "STALE_GPS"
+            ambulance_status_str = freshness
+            has_live_amb = (freshness in ("LIVE", "STALE"))
+            
+            top_amb = AmbulanceRecommendation(
+                ambulance_id=assigned_amb_id,
+                vehicle_number=amb_data.get("vehicle_number", assigned_amb_id),
+                capability=amb_data.get("capability", "ADVANCED"),
+                distance_km=dist_km,
+                eta_minutes=eta,
+                match_score=100.0,
+                reasons=[f"Assigned responding unit ({freshness} telemetry • {age_sec:.0f}s ago)"],
+                latitude=lat,
+                longitude=lon,
+                source=ambulance_source,
+                status=amb_data.get("status", "EN_ROUTE"),
+                updated_at=amb_data.get("updated_at", time.time() * 1000.0),
+                freshness_status=freshness,
+                is_demo=bool(amb_data.get("is_demo", False))
+            )
+        else:
+            # Fallback to database assigned ambulance (e.g. registered vehicle)
+            db_amb = next((a for a in ambulances if a.id == assigned_amb_id), None)
+            if db_amb:
+                dist_km = calculate_haversine_distance(emergency.latitude, emergency.longitude, db_amb.latitude, db_amb.longitude)
+                eta = estimate_ambulance_eta(dist_km)
+                is_amb_demo = bool(getattr(db_amb, "is_demo", False))
+                ambulance_source = "DEMO_TELEMETRY" if is_amb_demo else "DATABASE"
+                ambulance_status_str = "DEMO" if is_amb_demo else "LIVE"
+                has_live_amb = True
+                
+                top_amb = AmbulanceRecommendation(
+                    ambulance_id=db_amb.id,
+                    vehicle_number=db_amb.vehicle_number,
+                    capability=db_amb.capability,
+                    distance_km=dist_km,
+                    eta_minutes=eta,
+                    match_score=100.0,
+                    reasons=[f"Assigned unit: {db_amb.vehicle_number}"],
+                    latitude=db_amb.latitude,
+                    longitude=db_amb.longitude,
+                    source=ambulance_source,
+                    status=db_amb.status,
+                    updated_at=time.time() * 1000.0,
+                    freshness_status=ambulance_status_str,
+                    is_demo=is_amb_demo
+                )
+    else:
+        # Case B: Unassigned emergency - Find eligible candidate unit within operational range (<= 35km)
+        # 1. Check for real connected GPS ambulances with fresh telemetry
+        live_items = get_live_ambulances_list()
+        live_dict_list = [item.model_dump() for item in live_items]
+        if live_dict_list:
+            live_ranked = rank_live_ambulances(live_dict_list, emergency)
+            available_live = [a for a in live_ranked if a.freshness_status == "LIVE" and a.status in ("AVAILABLE", "ALERTED")]
+            if available_live:
+                top_amb = available_live[0]
+                has_live_amb = True
+                ambulance_source = "LIVE_GPS"
+                ambulance_status_str = "LIVE"
+                
+                # Compute live route from Ambulance GPS -> Emergency Scene
+                try:
+                    amb_origin = Coordinate(latitude=top_amb.latitude, longitude=top_amb.longitude)
+                    emg_dest = Coordinate(latitude=emergency.latitude, longitude=emergency.longitude)
+                    amb_routes, _, _ = await compute_google_routes(amb_origin, emg_dest, "TRAFFIC_AWARE")
+                    if amb_routes and len(amb_routes) > 0:
+                        top_amb.eta_minutes = amb_routes[0].adjusted_eta_minutes
+                        top_amb.distance_km = amb_routes[0].distance_km
+                except Exception as e:
+                    logger.warning(f"Failed to calculate exact route for live ambulance candidate: {e}")
+
+        # 2. If no live ambulance, evaluate registered database fleet within range
+        if not top_amb and len(ambulances) > 0:
             ranked_ambs = rank_ambulances(ambulances, emergency)
             if ranked_ambs:
                 top_amb = ranked_ambs[0]
-                ambulance_source = "DEMO_TELEMETRY"
-                ambulance_status_str = "DEMO"
-                has_live_amb = False
-        else:
+                is_amb_demo = bool(getattr(top_amb, "is_demo", False))
+                ambulance_source = "DEMO_TELEMETRY" if is_amb_demo else "DATABASE"
+                ambulance_status_str = "DEMO" if is_amb_demo else "LIVE"
+                has_live_amb = not is_amb_demo
+
+        if not top_amb:
             has_live_amb = False
-            no_amb_reason = "LifeLine could not verify a nearby ambulance with a current GPS location."
+            no_amb_reason = "LifeLine could not verify a nearby registered ambulance with current GPS telemetry."
 
     # 2. Live Hospital Discovery (Google Places API New)
     places_list, hospital_source, hospital_status, _ = await discover_nearby_hospitals_places(

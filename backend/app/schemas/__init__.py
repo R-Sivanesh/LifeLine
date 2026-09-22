@@ -434,7 +434,11 @@ class EmergencyDispatcherState(BaseModel):
     severity: str = "MEDIUM"
     patient_count: Optional[int] = None
     critical_patient_count: Optional[int] = None
+    injury_reported: Optional[bool] = None
+    bleeding_reported: Optional[bool] = None
+    is_unconscious: Optional[bool] = None
     location_description: Optional[str] = None
+    location_mentioned: Optional[str] = None
     location_confirmed: bool = False
     latitude: Optional[float] = None
     longitude: Optional[float] = None

@@ -72,6 +72,11 @@ export const lifelineApi = {
     return res.data;
   },
 
+  getNearbyLandmarks: async (lat: number, lng: number, limit: number = 5) => {
+    const res = await api.get('/location/nearby', { params: { lat, lng, limit } });
+    return res.data;
+  },
+
   // Gemini AI Dispatcher
   chatDispatcher: async (data: {
     message: string;
