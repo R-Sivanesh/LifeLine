@@ -1,4 +1,27 @@
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type IncidentSeverity = Severity;
+export type Coordinate = [number, number];
+
+export interface IncidentLocation {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  formatted_address?: string;
+  landmark?: string;
+  place_name?: string;
+  source?: string;
+  accuracy?: number;
+  accuracy_meters?: number;
+}
+
+export interface NearbyLandmarkItem {
+  name: string;
+  distance_meters?: number;
+  type?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export type EmergencyStatus =
   | 'CREATED'
   | 'SEARCHING'
@@ -132,6 +155,7 @@ export interface Driver {
   otp_verified_at?: string;
   role: UserRole;
   assigned_ambulance_id?: string;
+  hospital_name?: string;
   status: LiveAmbulanceStatus;
   latitude?: number;
   longitude?: number;

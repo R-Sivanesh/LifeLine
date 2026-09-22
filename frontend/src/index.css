@@ -5,131 +5,132 @@
   html {
     /* Prevent rubber-band overscroll */
     overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+  
   body {
-    @apply bg-zinc-950 text-zinc-100 antialiased selection:bg-red-500/30 selection:text-red-200;
+    @apply bg-slate-950 text-slate-100 antialiased selection:bg-cyan-500/30 selection:text-cyan-200;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    /* Respect safe areas on iPhone notch / home-bar */
+    min-height: 100vh;
+    min-height: 100dvh;
+    /* Respect safe areas on modern mobile devices */
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
 
-  /* Better tap highlight on mobile */
-  * {
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* All interactive elements: comfortable touch size */
+  /* Accessible touch sizing */
   button, a[href], input, select, textarea {
     touch-action: manipulation;
   }
+  
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
-/* Custom scrollbars */
+/* Custom modern scrollbars */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #09090b;
+  background: #020617;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 3px;
+  background: #1e293b;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  background: #334155;
 }
 
 /* ================================================================= */
-/* GLOW ANIMATIONS */
+/* CALM & PURPOSEFUL TRANSITIONS                                     */
 /* ================================================================= */
-@keyframes pulse-glow {
-  0%, 100% { opacity: 1; box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); }
-  50%       { opacity: 0.7; box-shadow: 0 0 30px rgba(239, 68, 68, 0.95); }
-}
-
-@keyframes pulse-amber {
-  0%, 100% { opacity: 1; box-shadow: 0 0 15px rgba(245, 158, 11, 0.6); }
-  50%       { opacity: 0.7; box-shadow: 0 0 30px rgba(245, 158, 11, 0.95); }
-}
-
-@keyframes pulse-emerald {
-  0%, 100% { opacity: 1; box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
-  50%       { opacity: 0.8; box-shadow: 0 0 28px rgba(16, 185, 129, 0.85); }
-}
-
-@keyframes pulse-cyan {
-  0%, 100% { opacity: 1; box-shadow: 0 0 15px rgba(6, 182, 212, 0.5); }
-  50%       { opacity: 0.8; box-shadow: 0 0 28px rgba(6, 182, 212, 0.85); }
-}
-
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.animate-pulse-glow    { animation: pulse-glow    2s infinite ease-in-out; }
-.animate-pulse-amber   { animation: pulse-amber   2s infinite ease-in-out; }
-.animate-pulse-emerald { animation: pulse-emerald 2s infinite ease-in-out; }
-.animate-pulse-cyan    { animation: pulse-cyan    2s infinite ease-in-out; }
-.animate-fadeIn        { animation: fadeIn 0.25s ease-out both; }
-
-/* ================================================================= */
-/* GLOWING INPUT — used on chat box border */
-/* ================================================================= */
-.input-glow {
-  border: 2px solid rgba(239, 68, 68, 0.6);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12), 0 0 18px rgba(239, 68, 68, 0.25);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.input-glow:focus-within {
-  border-color: rgba(239, 68, 68, 0.9);
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18), 0 0 28px rgba(239, 68, 68, 0.40);
+@keyframes pulseSubtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
 }
 
-/* Glowing border utilities for cards */
-.card-glow-red {
-  border-color: rgba(239, 68, 68, 0.5);
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1), 0 4px 24px rgba(0,0,0,0.6);
+@keyframes radarSweep {
+  0% { transform: scale(0.85); opacity: 0.8; }
+  50% { transform: scale(1.3); opacity: 0.2; }
+  100% { transform: scale(1.6); opacity: 0; }
 }
-.card-glow-emerald {
-  border-color: rgba(16, 185, 129, 0.5);
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1), 0 4px 24px rgba(0,0,0,0.6);
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.card-glow-amber {
-  border-color: rgba(245, 158, 11, 0.55);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 4px 24px rgba(0,0,0,0.6);
+
+.animate-pulse-subtle {
+  animation: pulseSubtle 2.5s infinite ease-in-out;
 }
-.card-glow-cyan {
-  border-color: rgba(6, 182, 212, 0.5);
-  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.1), 0 4px 24px rgba(0,0,0,0.6);
+
+.animate-radar {
+  animation: radarSweep 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 /* ================================================================= */
-/* MAPBOX POPUP */
+/* DESIGN SYSTEM SURFACES & CARDS                                    */
+/* ================================================================= */
+.lifeline-surface {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.7);
+}
+
+.lifeline-surface-hover:hover {
+  border-color: rgba(14, 165, 233, 0.5);
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.lifeline-card-critical {
+  background: rgba(69, 10, 10, 0.4);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.lifeline-card-success {
+  background: rgba(6, 78, 59, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.lifeline-card-amber {
+  background: rgba(69, 26, 3, 0.35);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+/* ================================================================= */
+/* MAPBOX POPUP OVERRIDES                                            */
 /* ================================================================= */
 .mapboxgl-popup-content {
-  background: #09090b !important;
-  color: #f4f4f5 !important;
-  border: 1px solid #3f3f46 !important;
-  border-radius: 0.75rem !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8) !important;
+  background: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.75) !important;
   padding: 12px 14px !important;
 }
+
 .mapboxgl-popup-tip {
-  border-top-color: #3f3f46 !important;
-  border-bottom-color: #3f3f46 !important;
+  border-top-color: #334155 !important;
+  border-bottom-color: #334155 !important;
 }
 
-/* Mapbox Marker Custom Styles */
+/* Mapbox Marker Styles */
 .custom-marker {
   cursor: pointer;
   transform: translate(-50%, -50%);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .custom-marker:hover {
-  transform: translate(-50%, -50%) scale(1.15);
+  transform: translate(-50%, -50%) scale(1.1);
   z-index: 50;
 }
